@@ -6,7 +6,6 @@ format:
     code-fold: false
     toc: true
     toc-depth: 3
-jupyter: python3
 ---
 
 ## Model Setup
@@ -139,539 +138,176 @@ $$
 
 where $\tilde{W} \in \mathbb{R}$ is the learnable parameter. This ensures $W > 0$ while allowing gradient-based optimization.
 
-### Architecture
+### Architecture Pseudo Code
 
-```{python}
-import numpy as np
-import matplotlib.pyplot as plt
-import torch
-import torch.nn as nn
+```
+CLASS: MonotonicLayer
+─────────────────────
+  # A linear layer with non-negative weights
 
+  ATTRIBUTES:
+    weight_raw : matrix of unconstrained parameters
+    bias : vector (unconstrained)
 
-class MonotonicLayer(nn.Module):
-    """
-    A linear layer with non-negative weights (monotonic in inputs).
-    
-    Weights are parameterized as softplus of unconstrained parameters.
-    """
-    
-    def __init__(self, in_features, out_features, bias=True):
-        super().__init__()
-        self.in_features = in_features
-        self.out_features = out_features
-        
-        # Unconstrained weight parameters
-        self.weight_raw = nn.Parameter(torch.randn(out_features, in_features))
-        
-        # Bias (unconstrained)
-        if bias:
-            self.bias = nn.Parameter(torch.zeros(out_features))
-        else:
-            self.register_parameter("bias", None)
-    
-    def forward(self, x):
-        # Apply softplus to get non-negative weights
-        weight = nn.functional.softplus(self.weight_raw)
-        return nn.functional.linear(input=x, weight=weight, bias=self.bias)
-
-
-class MonotonicValueNetwork(nn.Module):
-    """
-    Monotonic neural network for approximating value functions.
-    
-    Ensures output is monotonically increasing in input state.
-    
-    Parameters
-    ----------
-    hidden_sizes : list of int
-        Number of units in each hidden layer
-    """
-    
-    def __init__(self, hidden_sizes):
-        super().__init__()
-        
-        layers = []
-        in_size = 1  # Single state input
-        
-        for hidden_size in hidden_sizes:
-            layers.append(MonotonicLayer(in_features=in_size, out_features=hidden_size))
-            layers.append(nn.Softplus())
-            in_size = hidden_size
-        
-        # Output layer (single value output)
-        layers.append(MonotonicLayer(in_features=in_size, out_features=1))
-        
-        self.network = nn.Sequential(*layers)
-    
-    def forward(self, s):
-        """
-        Compute value function at state(s).
-        
-        Parameters
-        ----------
-        s : torch.Tensor
-            State(s), shape (batch_size,) or (batch_size, 1)
-        
-        Returns
-        -------
-        torch.Tensor
-            Value(s), shape (batch_size,)
-        """
-        if s.dim() == 1:
-            s = s.unsqueeze(dim=-1)
-        return self.network(s).squeeze(dim=-1)
+  METHOD: FORWARD(x)
+    weight ← softplus(weight_raw)    # Ensure W > 0
+    RETURN weight @ x + bias
 ```
 
-### Value Function Approximator
+```
+CLASS: MonotonicValueNetwork
+────────────────────────────
+  # Feed-forward network ensuring monotonicity in input
 
-We create separate monotonic networks for each action:
+  ATTRIBUTES:
+    layers : list of (MonotonicLayer, Softplus) pairs
+    output_layer : MonotonicLayer
 
-```{python}
-class ValueFunctionApproximator(nn.Module):
-    """
-    Approximates choice-specific value functions v(s, 0) and v(s, 1).
-    
-    Uses separate monotonic networks for each action.
-    
-    Parameters
-    ----------
-    hidden_sizes : list of int
-        Hidden layer sizes for each network
-    """
-    
-    def __init__(self, hidden_sizes):
-        super().__init__()
-        self.v0_net = MonotonicValueNetwork(hidden_sizes=hidden_sizes)
-        self.v1_net = MonotonicValueNetwork(hidden_sizes=hidden_sizes)
-    
-    def forward(self, s):
-        """
-        Compute choice-specific values for both actions.
-        
-        Parameters
-        ----------
-        s : torch.Tensor
-            State(s)
-        
-        Returns
-        -------
-        v0 : torch.Tensor
-            Value of action 0
-        v1 : torch.Tensor
-            Value of action 1
-        """
-        v0 = self.v0_net(s)
-        v1 = self.v1_net(s)
-        return v0, v1
-    
-    def integrated_value(self, s):
-        """
-        Compute integrated value function (log-sum-exp).
-        
-        Parameters
-        ----------
-        s : torch.Tensor
-            State(s)
-        
-        Returns
-        -------
-        torch.Tensor
-            Integrated value V(s)
-        """
-        v0, v1 = self.forward(s)
-        return torch.logsumexp(torch.stack([v0, v1], dim=-1), dim=-1)
-    
-    def choice_probability(self, s):
-        """
-        Compute probability of choosing action 1.
-        
-        Parameters
-        ----------
-        s : torch.Tensor
-            State(s)
-        
-        Returns
-        -------
-        torch.Tensor
-            P(a=1|s)
-        """
-        v0, v1 = self.forward(s)
-        return torch.sigmoid(v1 - v0)
+  CONSTRUCTOR(hidden_sizes):
+    in_size ← 1  # Single state input
+    FOR each hidden_size IN hidden_sizes:
+      ADD MonotonicLayer(in_size → hidden_size)
+      ADD Softplus activation
+      in_size ← hidden_size
+    ADD MonotonicLayer(in_size → 1)  # Output layer
+
+  METHOD: FORWARD(s)
+    x ← reshape(s, (-1, 1))
+    FOR each layer IN layers:
+      x ← layer(x)
+    RETURN squeeze(x)
 ```
 
-### Verify Monotonicity
+```
+CLASS: ValueFunctionApproximator
+────────────────────────────────
+  # Approximates v(s, 0) and v(s, 1) with separate monotonic networks
 
-```{python}
-# Create network and verify monotonicity
-torch.manual_seed(42)
-nn_value = ValueFunctionApproximator(hidden_sizes=[32, 32])
+  ATTRIBUTES:
+    v0_net : MonotonicValueNetwork
+    v1_net : MonotonicValueNetwork
 
-# Test on a grid
-s_test = torch.linspace(start=0.0, end=10.0, steps=100)
-with torch.no_grad():
-    v0_nn, v1_nn = nn_value(s_test)
+  CONSTRUCTOR(hidden_sizes):
+    v0_net ← MonotonicValueNetwork(hidden_sizes)
+    v1_net ← MonotonicValueNetwork(hidden_sizes)
 
-# Check monotonicity: differences should be non-negative
-v0_diff = torch.diff(v0_nn)
-v1_diff = torch.diff(v1_nn)
+  METHOD: FORWARD(s)
+    v0 ← v0_net(s)
+    v1 ← v1_net(s)
+    RETURN v0, v1
 
-print(f"v(s, 0) monotonically increasing: {(v0_diff >= -1e-6).all().item()}")
-print(f"v(s, 1) monotonically increasing: {(v1_diff >= -1e-6).all().item()}")
-print(f"Min increment v0: {v0_diff.min().item():.6f}")
-print(f"Min increment v1: {v1_diff.min().item():.6f}")
+  METHOD: COMPUTE_INTEGRATED_VALUE(s)
+    v0, v1 ← FORWARD(s)
+    RETURN logsumexp(stack(v0, v1))
+
+  METHOD: COMPUTE_CHOICE_PROBABILITY(s)
+    v0, v1 ← FORWARD(s)
+    RETURN sigmoid(v1 - v0)
 ```
 
-### Visualize Network Output (Untrained)
+## Value Iteration Algorithm
 
-```{python}
-#| label: fig-nn-untrained
-#| fig-cap: "Monotonic neural network output (untrained, random initialization)"
+### Pseudo Code
 
-fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(12, 5))
+```
+ALGORITHM: SolveValueFunction
+INPUT: state_grid, β, γ, δ, tolerance, max_iterations
+OUTPUT: V (integrated value function), v₀, v₁ (choice-specific values)
 
-s_plot = torch.linspace(start=0.0, end=10.0, steps=200)
-with torch.no_grad():
-    v0_plot, v1_plot = nn_value(s_plot)
+1. V ← INITIALIZE_VALUE_FUNCTION(state_grid)
 
-ax = axes[0]
-ax.plot(s_plot.numpy(), v0_plot.numpy(), label="$v_\\theta(s, 0)$", linewidth=2)
-ax.plot(s_plot.numpy(), v1_plot.numpy(), label="$v_\\theta(s, 1)$", linewidth=2)
-ax.set_xlabel("State $s$")
-ax.set_ylabel("Value")
-ax.set_title("Choice-Specific Values (Untrained)")
-ax.legend()
-ax.grid(alpha=0.3)
+2. FOR iteration = 1 TO max_iterations:
+   
+   a. v₀ ← COMPUTE_CHOICE_VALUE(V, state_grid, action=0, β, γ, δ)
+   b. v₁ ← COMPUTE_CHOICE_VALUE(V, state_grid, action=1, β, γ, δ)
+   
+   c. V_new ← COMPUTE_INTEGRATED_VALUE(v₀, v₁)
+   
+   d. IF CHECK_CONVERGENCE(V, V_new, tolerance):
+        RETURN V_new, v₀, v₁
+   
+   e. V ← V_new
 
-ax = axes[1]
-with torch.no_grad():
-    prob_plot = nn_value.choice_probability(s_plot)
-ax.plot(s_plot.numpy(), prob_plot.numpy(), color="darkred", linewidth=2)
-ax.axhline(y=0.5, color="gray", linestyle="--", alpha=0.5)
-ax.set_xlabel("State $s$")
-ax.set_ylabel("$P(a=1|s)$")
-ax.set_title("Choice Probability (Untrained)")
-ax.set_ylim([-0.05, 1.05])
-ax.grid(alpha=0.3)
-
-plt.tight_layout()
-plt.show()
+3. WARN("Did not converge")
+   RETURN V, v₀, v₁
 ```
 
-## Implementation
+### Subroutines
 
-```{python}
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.special import logsumexp
-from scipy.interpolate import interp1d
+```
+SUBROUTINE: INITIALIZE_VALUE_FUNCTION(state_grid)
+────────────────────────────────────────────────
+  RETURN zeros(length(state_grid))
 ```
 
-### Model Parameters
-
-```{python}
-# Model parameters
-beta = 1.0      # Reward coefficient on state
-gamma = 0.1     # State decay rate
-delta = 0.95    # Discount factor
-
-# State space: continuous state discretized on a grid
-n_states = 200
-s_min, s_max = 0.0, 10.0
-s_grid = np.linspace(start=s_min, stop=s_max, num=n_states)
-
-# Convergence tolerance
-tol = 1e-10
-max_iter = 1000
+```
+SUBROUTINE: COMPUTE_CHOICE_VALUE(V, state_grid, action, β, γ, δ)
+────────────────────────────────────────────────────────────────
+  # Step 1: Compute flow reward
+  reward ← COMPUTE_REWARD(state_grid, action, β)
+  
+  # Step 2: Compute next states
+  next_states ← COMPUTE_NEXT_STATE(state_grid, action, γ)
+  
+  # Step 3: Interpolate continuation value at next states
+  continuation ← INTERPOLATE_VALUE(V, state_grid, next_states)
+  
+  # Step 4: Combine flow reward and discounted continuation
+  RETURN reward + δ * continuation
 ```
 
-### Reward Function
-
-$$u(s, a) = \beta s - a$$
-
-```{python}
-def reward(s, a, beta):
-    """
-    Deterministic mean reward function.
-    
-    Parameters
-    ----------
-    s : array_like
-        Current state(s)
-    a : int
-        Action (0 or 1)
-    beta : float
-        Reward coefficient on state
-    
-    Returns
-    -------
-    array_like
-        Reward for each state
-    """
-    return beta * s - a
+```
+SUBROUTINE: COMPUTE_REWARD(s, action, β)
+────────────────────────────────────────
+  RETURN β * s - action
 ```
 
-### State Transition
-
-$$s' = (1 - \gamma) s + a$$
-
-The transition is deterministic. For value function iteration on a grid, we use linear interpolation to evaluate $V(s')$ at off-grid points.
-
-```{python}
-def next_state(s, a, gamma):
-    """
-    Compute next state given current state and action.
-    
-    Parameters
-    ----------
-    s : array_like
-        Current state(s)
-    a : int
-        Action (0 or 1)
-    gamma : float
-        State decay rate
-    
-    Returns
-    -------
-    array_like
-        Next state(s)
-    """
-    return (1 - gamma) * s + a
+```
+SUBROUTINE: COMPUTE_NEXT_STATE(s, action, γ)
+────────────────────────────────────────────
+  RETURN (1 - γ) * s + action
 ```
 
-### Value Function Iteration
-
-```{python}
-def solve_value_function(
-    s_grid,
-    beta,
-    gamma,
-    delta,
-    tol,
-    max_iter,
-):
-    """
-    Solve for the integrated value function using contraction mapping.
-    
-    Parameters
-    ----------
-    s_grid : array_like
-        State grid
-    beta : float
-        Reward coefficient on state
-    gamma : float
-        State decay rate
-    delta : float
-        Discount factor
-    tol : float
-        Convergence tolerance
-    max_iter : int
-        Maximum iterations
-    
-    Returns
-    -------
-    V : ndarray
-        Integrated value function on grid
-    v0 : ndarray
-        Choice-specific value for action 0
-    v1 : ndarray
-        Choice-specific value for action 1
-    n_iter : int
-        Number of iterations to converge
-    """
-    n = len(s_grid)
-    
-    # Initialize value function
-    V = np.zeros(shape=n)
-    
-    # Precompute rewards (don't depend on V)
-    u0 = reward(s=s_grid, a=0, beta=beta)
-    u1 = reward(s=s_grid, a=1, beta=beta)
-    
-    # Precompute next states
-    s_next_0 = next_state(s=s_grid, a=0, gamma=gamma)
-    s_next_1 = next_state(s=s_grid, a=1, gamma=gamma)
-    
-    for iteration in range(max_iter):
-        # Interpolate V to evaluate at next states
-        V_interp = interp1d(
-            x=s_grid,
-            y=V,
-            kind="linear",
-            bounds_error=False,
-            fill_value=(V[0], V[-1]),  # Extrapolate with boundary values
-        )
-        
-        # Continuation values (deterministic transition)
-        EV0 = V_interp(s_next_0)
-        EV1 = V_interp(s_next_1)
-        
-        # Choice-specific values (without shocks)
-        v0 = u0 + delta * EV0
-        v1 = u1 + delta * EV1
-        
-        # Integrated value function (log-sum-exp for numerical stability)
-        V_new = logsumexp(a=np.stack([v0, v1], axis=1), axis=1)
-        
-        # Check convergence
-        diff = np.max(np.abs(V_new - V))
-        V = V_new
-        
-        if diff < tol:
-            print(f"Converged in {iteration + 1} iterations (diff = {diff:.2e})")
-            break
-    else:
-        print(f"Warning: Did not converge after {max_iter} iterations (diff = {diff:.2e})")
-    
-    # Recompute final choice-specific values
-    V_interp = interp1d(
-        x=s_grid,
-        y=V,
-        kind="linear",
-        bounds_error=False,
-        fill_value=(V[0], V[-1]),
-    )
-    EV0 = V_interp(s_next_0)
-    EV1 = V_interp(s_next_1)
-    v0 = u0 + delta * EV0
-    v1 = u1 + delta * EV1
-    
-    return V, v0, v1, iteration + 1
+```
+SUBROUTINE: INTERPOLATE_VALUE(V, state_grid, query_states)
+──────────────────────────────────────────────────────────
+  # Linear interpolation with boundary extrapolation
+  RETURN linear_interpolate(
+    x=state_grid,
+    y=V,
+    query=query_states,
+    extrapolate=boundary_values
+  )
 ```
 
-### Solve the Model
-
-```{python}
-V, v0, v1, n_iter = solve_value_function(
-    s_grid=s_grid,
-    beta=beta,
-    gamma=gamma,
-    delta=delta,
-    tol=tol,
-    max_iter=max_iter,
-)
+```
+SUBROUTINE: COMPUTE_INTEGRATED_VALUE(v₀, v₁)
+────────────────────────────────────────────
+  # Log-sum-exp formula (Emax with Type-I EV shocks)
+  RETURN log(exp(v₀) + exp(v₁))
 ```
 
-### Compute Choice Probabilities
-
-```{python}
-def choice_probability(v0, v1):
-    """
-    Compute probability of choosing action 1 (logit formula).
-    
-    Parameters
-    ----------
-    v0 : ndarray
-        Choice-specific value for action 0
-    v1 : ndarray
-        Choice-specific value for action 1
-    
-    Returns
-    -------
-    ndarray
-        Probability of choosing action 1
-    """
-    # Use numerically stable softmax
-    v_max = np.maximum(v0, v1)
-    exp_v0 = np.exp(v0 - v_max)
-    exp_v1 = np.exp(v1 - v_max)
-    
-    prob_a1 = exp_v1 / (exp_v0 + exp_v1)
-    return prob_a1
-
-
-prob_a1 = choice_probability(v0=v0, v1=v1)
+```
+SUBROUTINE: CHECK_CONVERGENCE(V_old, V_new, tolerance)
+──────────────────────────────────────────────────────
+  diff ← max(|V_new - V_old|)
+  RETURN diff < tolerance
 ```
 
-## Results
+### Derived Quantities
 
-### Value Functions
-
-```{python}
-#| label: fig-value-functions
-#| fig-cap: "Value functions by state"
-
-fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(12, 5))
-
-# Plot choice-specific values
-ax = axes[0]
-ax.plot(s_grid, v0, label="$v(s, 0)$", linewidth=2)
-ax.plot(s_grid, v1, label="$v(s, 1)$", linewidth=2)
-ax.set_xlabel("State $s$")
-ax.set_ylabel("Choice-specific value")
-ax.set_title("Choice-Specific Value Functions")
-ax.legend()
-ax.grid(alpha=0.3)
-
-# Plot integrated value
-ax = axes[1]
-ax.plot(s_grid, V, color="black", linewidth=2)
-ax.set_xlabel("State $s$")
-ax.set_ylabel("$V(s)$")
-ax.set_title("Integrated Value Function (Emax)")
-ax.grid(alpha=0.3)
-
-plt.tight_layout()
-plt.show()
 ```
-
-### Choice Probabilities
-
-```{python}
-#| label: fig-choice-prob
-#| fig-cap: "Probability of choosing action 1 by state"
-
-fig, ax = plt.subplots(figsize=(8, 5))
-
-ax.plot(s_grid, prob_a1, color="darkred", linewidth=2)
-ax.axhline(y=0.5, color="gray", linestyle="--", alpha=0.5)
-ax.set_xlabel("State $s$")
-ax.set_ylabel("$P(a = 1 | s)$")
-ax.set_title("Probability of Action 1")
-ax.set_ylim([-0.05, 1.05])
-ax.grid(alpha=0.3)
-
-plt.tight_layout()
-plt.show()
-```
-
-### Policy Interpretation
-
-```{python}
-# Find threshold state where choice probability crosses 50%
-threshold_idx = np.argmin(np.abs(prob_a1 - 0.5))
-threshold_state = s_grid[threshold_idx]
-
-print(f"Model parameters: β = {beta}, γ = {gamma}, δ = {delta}")
-print(f"Threshold state (P(a=1) ≈ 0.5): s ≈ {threshold_state:.2f}")
-print(f"At s = {s_min:.1f}: P(a=1) = {prob_a1[0]:.3f}")
-print(f"At s = {s_max:.1f}: P(a=1) = {prob_a1[-1]:.3f}")
-```
-
-### Value Function Difference
-
-The choice depends on $v(s, 1) - v(s, 0)$:
-
-```{python}
-#| label: fig-value-diff
-#| fig-cap: "Difference in choice-specific values"
-
-fig, ax = plt.subplots(figsize=(8, 5))
-
-v_diff = v1 - v0
-ax.plot(s_grid, v_diff, color="darkblue", linewidth=2)
-ax.axhline(y=0, color="gray", linestyle="--", alpha=0.5)
-ax.set_xlabel("State $s$")
-ax.set_ylabel("$v(s, 1) - v(s, 0)$")
-ax.set_title("Value Difference (Action 1 minus Action 0)")
-ax.grid(alpha=0.3)
-
-plt.tight_layout()
-plt.show()
+SUBROUTINE: COMPUTE_CHOICE_PROBABILITY(v₀, v₁)
+──────────────────────────────────────────────
+  # Logit formula: P(a=1|s)
+  RETURN exp(v₁) / (exp(v₀) + exp(v₁))
+  
+  # Equivalently: sigmoid(v₁ - v₀)
 ```
 
 ## Summary
 
-This model demonstrates a dynamic discrete choice problem with:
+This document describes a dynamic discrete choice problem with:
 
 - **State dynamics**: $s' = (1 - \gamma) s + a$ — state decays naturally, action 1 boosts it
 - **Trade-off**: Action 1 costs 1 today but increases future state (and hence future rewards)
@@ -683,3 +319,9 @@ The solution method:
 2. **Interpolate** to handle off-grid continuation values
 3. **Iterate** on the Bellman equation using log-sum-exp
 4. **Recover** choice probabilities from the logit formula
+
+The neural network approximation:
+
+1. Use **monotonic networks** (non-negative weights + softplus activation)
+2. Separate networks for each action's value function
+3. Enforce economic structure (monotonicity) as architectural constraint
