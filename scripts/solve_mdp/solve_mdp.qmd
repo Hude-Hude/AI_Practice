@@ -1,0 +1,427 @@
+---
+title: "Solving a Dynamic Discrete Choice Model"
+subtitle: "MDP with Type-I Extreme Value Shocks"
+format:
+  html:
+    code-fold: false
+    toc: true
+    toc-depth: 3
+jupyter: python3
+---
+
+## Model Setup
+
+We consider a dynamic discrete choice model with:
+
+- **State**: $s \in \mathbb{R}$ (continuous, discretized on a grid)
+- **Action**: $a \in \{0, 1\}$ (binary choice)
+- **Mean reward**: $u(s, a) = \beta s - a$
+- **State transition**: $s' = (1 - \gamma) s + a$ (deterministic)
+- **Discount factor**: $\delta$
+- **Shocks**: $\varepsilon_a \sim$ Type-I Extreme Value (iid across actions and time)
+
+### Interpretation
+
+- Higher state $s$ yields higher flow payoff (coefficient $\beta > 0$)
+- Action $a = 1$ costs 1 unit but boosts next period's state by 1
+- Action $a = 0$ is free but state decays toward zero at rate $\gamma$
+
+## Optimal Markov Decision Policy
+
+### Bellman Equation with Extreme Value Shocks
+
+Each period, the agent observes state $s$ and receives action-specific shocks $(\varepsilon_0, \varepsilon_1)$ drawn iid from the Type-I Extreme Value (Gumbel) distribution:
+$$
+F(\varepsilon) = \exp(-\exp(-\varepsilon)), \quad f(\varepsilon) = \exp(-\varepsilon - \exp(-\varepsilon))
+$$
+
+The agent chooses action $a \in \{0, 1\}$ to maximize:
+$$
+u(s, a) + \varepsilon_a + \delta V(s')
+$$
+where $s' = (1 - \gamma)s + a$ is the next state.
+
+The **Bellman equation** is:
+$$
+V(s, \varepsilon_0, \varepsilon_1) = \max_{a \in \{0,1\}} \left\{ u(s, a) + \varepsilon_a + \delta \mathbb{E}_{\varepsilon'} \left[ V(s', \varepsilon_0', \varepsilon_1') \right] \right\}
+$$
+
+### Choice-Specific Value Functions
+
+Define the **choice-specific value function** (the deterministic part, excluding the current shock):
+$$
+v(s, a) = u(s, a) + \delta \mathbb{E}_{\varepsilon'} \left[ V(s', \varepsilon') \right]
+$$
+
+Substituting the reward and transition:
+$$
+v(s, a) = \beta s - a + \delta \bar{V}\bigl((1 - \gamma) s + a\bigr)
+$$
+where $\bar{V}(s) = \mathbb{E}_\varepsilon[V(s, \varepsilon)]$ is the **integrated (ex-ante) value function**.
+
+### Optimal Policy
+
+The optimal decision rule is:
+$$
+a^*(s, \varepsilon_0, \varepsilon_1) = \arg\max_{a \in \{0,1\}} \left\{ v(s, a) + \varepsilon_a \right\} = \mathbf{1}\left\{ v(s, 1) + \varepsilon_1 > v(s, 0) + \varepsilon_0 \right\}
+$$
+
+The agent chooses $a = 1$ if and only if:
+$$
+v(s, 1) - v(s, 0) > \varepsilon_0 - \varepsilon_1
+$$
+
+### Integrated Value Function
+
+The **integrated value function** is the expected value before observing shocks:
+$$
+\bar{V}(s) = \mathbb{E}_{\varepsilon_0, \varepsilon_1} \left[ \max_{a \in \{0,1\}} \left\{ v(s, a) + \varepsilon_a \right\} \right]
+$$
+
+With Type-I EV shocks, this has a closed-form (the "log-sum-exp" formula):
+$$
+\bar{V}(s) = \log\left( \exp(v(s, 0)) + \exp(v(s, 1)) \right) + \gamma_E
+$$
+where $\gamma_E \approx 0.5772$ is Euler's constant. Since $\gamma_E$ is a constant, it does not affect the policy and is often omitted.
+
+### Choice Probabilities
+
+The probability of choosing action $a = 1$ given state $s$ follows the **logit formula**:
+$$
+P(a = 1 | s) = P(\varepsilon_0 - \varepsilon_1 < v(s, 1) - v(s, 0)) = \frac{\exp(v(s, 1))}{\exp(v(s, 0)) + \exp(v(s, 1))}
+$$
+
+Equivalently:
+$$
+P(a = 1 | s) = \frac{1}{1 + \exp(v(s, 0) - v(s, 1))} = \Lambda(v(s, 1) - v(s, 0))
+$$
+where $\Lambda(x) = \frac{1}{1 + e^{-x}}$ is the logistic function.
+
+The optimal policy is a **stochastic Markov policy**: the choice probability depends only on the current state $s$ through the value difference $v(s, 1) - v(s, 0)$.
+
+## Implementation
+
+```{python}
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.special import logsumexp
+from scipy.interpolate import interp1d
+```
+
+### Model Parameters
+
+```{python}
+# Model parameters
+beta = 1.0      # Reward coefficient on state
+gamma = 0.1     # State decay rate
+delta = 0.95    # Discount factor
+
+# State space: continuous state discretized on a grid
+n_states = 200
+s_min, s_max = 0.0, 10.0
+s_grid = np.linspace(start=s_min, stop=s_max, num=n_states)
+
+# Convergence tolerance
+tol = 1e-10
+max_iter = 1000
+```
+
+### Reward Function
+
+$$u(s, a) = \beta s - a$$
+
+```{python}
+def reward(s, a, beta):
+    """
+    Deterministic mean reward function.
+    
+    Parameters
+    ----------
+    s : array_like
+        Current state(s)
+    a : int
+        Action (0 or 1)
+    beta : float
+        Reward coefficient on state
+    
+    Returns
+    -------
+    array_like
+        Reward for each state
+    """
+    return beta * s - a
+```
+
+### State Transition
+
+$$s' = (1 - \gamma) s + a$$
+
+The transition is deterministic. For value function iteration on a grid, we use linear interpolation to evaluate $V(s')$ at off-grid points.
+
+```{python}
+def next_state(s, a, gamma):
+    """
+    Compute next state given current state and action.
+    
+    Parameters
+    ----------
+    s : array_like
+        Current state(s)
+    a : int
+        Action (0 or 1)
+    gamma : float
+        State decay rate
+    
+    Returns
+    -------
+    array_like
+        Next state(s)
+    """
+    return (1 - gamma) * s + a
+```
+
+### Value Function Iteration
+
+```{python}
+def solve_value_function(
+    s_grid,
+    beta,
+    gamma,
+    delta,
+    tol,
+    max_iter,
+):
+    """
+    Solve for the integrated value function using contraction mapping.
+    
+    Parameters
+    ----------
+    s_grid : array_like
+        State grid
+    beta : float
+        Reward coefficient on state
+    gamma : float
+        State decay rate
+    delta : float
+        Discount factor
+    tol : float
+        Convergence tolerance
+    max_iter : int
+        Maximum iterations
+    
+    Returns
+    -------
+    V : ndarray
+        Integrated value function on grid
+    v0 : ndarray
+        Choice-specific value for action 0
+    v1 : ndarray
+        Choice-specific value for action 1
+    n_iter : int
+        Number of iterations to converge
+    """
+    n = len(s_grid)
+    
+    # Initialize value function
+    V = np.zeros(shape=n)
+    
+    # Precompute rewards (don't depend on V)
+    u0 = reward(s=s_grid, a=0, beta=beta)
+    u1 = reward(s=s_grid, a=1, beta=beta)
+    
+    # Precompute next states
+    s_next_0 = next_state(s=s_grid, a=0, gamma=gamma)
+    s_next_1 = next_state(s=s_grid, a=1, gamma=gamma)
+    
+    for iteration in range(max_iter):
+        # Interpolate V to evaluate at next states
+        V_interp = interp1d(
+            x=s_grid,
+            y=V,
+            kind="linear",
+            bounds_error=False,
+            fill_value=(V[0], V[-1]),  # Extrapolate with boundary values
+        )
+        
+        # Continuation values (deterministic transition)
+        EV0 = V_interp(s_next_0)
+        EV1 = V_interp(s_next_1)
+        
+        # Choice-specific values (without shocks)
+        v0 = u0 + delta * EV0
+        v1 = u1 + delta * EV1
+        
+        # Integrated value function (log-sum-exp for numerical stability)
+        V_new = logsumexp(a=np.stack([v0, v1], axis=1), axis=1)
+        
+        # Check convergence
+        diff = np.max(np.abs(V_new - V))
+        V = V_new
+        
+        if diff < tol:
+            print(f"Converged in {iteration + 1} iterations (diff = {diff:.2e})")
+            break
+    else:
+        print(f"Warning: Did not converge after {max_iter} iterations (diff = {diff:.2e})")
+    
+    # Recompute final choice-specific values
+    V_interp = interp1d(
+        x=s_grid,
+        y=V,
+        kind="linear",
+        bounds_error=False,
+        fill_value=(V[0], V[-1]),
+    )
+    EV0 = V_interp(s_next_0)
+    EV1 = V_interp(s_next_1)
+    v0 = u0 + delta * EV0
+    v1 = u1 + delta * EV1
+    
+    return V, v0, v1, iteration + 1
+```
+
+### Solve the Model
+
+```{python}
+V, v0, v1, n_iter = solve_value_function(
+    s_grid=s_grid,
+    beta=beta,
+    gamma=gamma,
+    delta=delta,
+    tol=tol,
+    max_iter=max_iter,
+)
+```
+
+### Compute Choice Probabilities
+
+```{python}
+def choice_probability(v0, v1):
+    """
+    Compute probability of choosing action 1 (logit formula).
+    
+    Parameters
+    ----------
+    v0 : ndarray
+        Choice-specific value for action 0
+    v1 : ndarray
+        Choice-specific value for action 1
+    
+    Returns
+    -------
+    ndarray
+        Probability of choosing action 1
+    """
+    # Use numerically stable softmax
+    v_max = np.maximum(v0, v1)
+    exp_v0 = np.exp(v0 - v_max)
+    exp_v1 = np.exp(v1 - v_max)
+    
+    prob_a1 = exp_v1 / (exp_v0 + exp_v1)
+    return prob_a1
+
+
+prob_a1 = choice_probability(v0=v0, v1=v1)
+```
+
+## Results
+
+### Value Functions
+
+```{python}
+#| label: fig-value-functions
+#| fig-cap: "Value functions by state"
+
+fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(12, 5))
+
+# Plot choice-specific values
+ax = axes[0]
+ax.plot(s_grid, v0, label="$v(s, 0)$", linewidth=2)
+ax.plot(s_grid, v1, label="$v(s, 1)$", linewidth=2)
+ax.set_xlabel("State $s$")
+ax.set_ylabel("Choice-specific value")
+ax.set_title("Choice-Specific Value Functions")
+ax.legend()
+ax.grid(alpha=0.3)
+
+# Plot integrated value
+ax = axes[1]
+ax.plot(s_grid, V, color="black", linewidth=2)
+ax.set_xlabel("State $s$")
+ax.set_ylabel("$V(s)$")
+ax.set_title("Integrated Value Function (Emax)")
+ax.grid(alpha=0.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+### Choice Probabilities
+
+```{python}
+#| label: fig-choice-prob
+#| fig-cap: "Probability of choosing action 1 by state"
+
+fig, ax = plt.subplots(figsize=(8, 5))
+
+ax.plot(s_grid, prob_a1, color="darkred", linewidth=2)
+ax.axhline(y=0.5, color="gray", linestyle="--", alpha=0.5)
+ax.set_xlabel("State $s$")
+ax.set_ylabel("$P(a = 1 | s)$")
+ax.set_title("Probability of Action 1")
+ax.set_ylim([-0.05, 1.05])
+ax.grid(alpha=0.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+### Policy Interpretation
+
+```{python}
+# Find threshold state where choice probability crosses 50%
+threshold_idx = np.argmin(np.abs(prob_a1 - 0.5))
+threshold_state = s_grid[threshold_idx]
+
+print(f"Model parameters: β = {beta}, γ = {gamma}, δ = {delta}")
+print(f"Threshold state (P(a=1) ≈ 0.5): s ≈ {threshold_state:.2f}")
+print(f"At s = {s_min:.1f}: P(a=1) = {prob_a1[0]:.3f}")
+print(f"At s = {s_max:.1f}: P(a=1) = {prob_a1[-1]:.3f}")
+```
+
+### Value Function Difference
+
+The choice depends on $v(s, 1) - v(s, 0)$:
+
+```{python}
+#| label: fig-value-diff
+#| fig-cap: "Difference in choice-specific values"
+
+fig, ax = plt.subplots(figsize=(8, 5))
+
+v_diff = v1 - v0
+ax.plot(s_grid, v_diff, color="darkblue", linewidth=2)
+ax.axhline(y=0, color="gray", linestyle="--", alpha=0.5)
+ax.set_xlabel("State $s$")
+ax.set_ylabel("$v(s, 1) - v(s, 0)$")
+ax.set_title("Value Difference (Action 1 minus Action 0)")
+ax.grid(alpha=0.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+## Summary
+
+This model demonstrates a dynamic discrete choice problem with:
+
+- **State dynamics**: $s' = (1 - \gamma) s + a$ — state decays naturally, action 1 boosts it
+- **Trade-off**: Action 1 costs 1 today but increases future state (and hence future rewards)
+- **Type-I EV shocks**: Provide smooth choice probabilities via logit formula
+
+The solution method:
+
+1. **Discretize** the continuous state space
+2. **Interpolate** to handle off-grid continuation values
+3. **Iterate** on the Bellman equation using log-sum-exp
+4. **Recover** choice probabilities from the logit formula
