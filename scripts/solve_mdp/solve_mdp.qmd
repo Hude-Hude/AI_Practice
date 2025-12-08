@@ -138,6 +138,17 @@ $$
 
 where $\tilde{W} \in \mathbb{R}$ is the learnable parameter. This ensures $W > 0$ while allowing gradient-based optimization.
 
+### Type Definitions
+
+```
+TYPE ALIASES:
+  Scalar    = Float
+  Vector    = Array[Float, n]           # 1D array of length n
+  Matrix    = Array[Float, m, n]        # 2D array of shape (m, n)
+  StateGrid = Vector                    # Discretized state space
+  Action    = Int ∈ {0, 1}              # Binary action
+```
+
 ### Architecture Pseudo Code
 
 ```
@@ -146,11 +157,11 @@ CLASS: MonotonicLayer
   # A linear layer with non-negative weights
 
   ATTRIBUTES:
-    weight_raw : matrix of unconstrained parameters
-    bias : vector (unconstrained)
+    weight_raw : Matrix[out_features, in_features]   # Unconstrained parameters
+    bias       : Vector[out_features]                # Unconstrained
 
-  METHOD: FORWARD(x)
-    weight ← softplus(weight_raw)    # Ensure W > 0
+  METHOD: FORWARD(x: Vector[in_features]) → Vector[out_features]
+    weight : Matrix[out_features, in_features] ← softplus(weight_raw)
     RETURN weight @ x + bias
 ```
 
@@ -160,20 +171,20 @@ CLASS: MonotonicValueNetwork
   # Feed-forward network ensuring monotonicity in input
 
   ATTRIBUTES:
-    layers : list of (MonotonicLayer, Softplus) pairs
+    layers       : List[MonotonicLayer | Softplus]
     output_layer : MonotonicLayer
 
-  CONSTRUCTOR(hidden_sizes):
-    in_size ← 1  # Single state input
-    FOR each hidden_size IN hidden_sizes:
-      ADD MonotonicLayer(in_size → hidden_size)
+  CONSTRUCTOR(hidden_sizes: List[Int])
+    in_size : Int ← 1  # Single state input
+    FOR hidden_size : Int IN hidden_sizes:
+      ADD MonotonicLayer(in_features=in_size, out_features=hidden_size)
       ADD Softplus activation
       in_size ← hidden_size
-    ADD MonotonicLayer(in_size → 1)  # Output layer
+    ADD MonotonicLayer(in_features=in_size, out_features=1)
 
-  METHOD: FORWARD(s)
-    x ← reshape(s, (-1, 1))
-    FOR each layer IN layers:
+  METHOD: FORWARD(s: Vector[n]) → Vector[n]
+    x : Matrix[n, 1] ← reshape(s, shape=(-1, 1))
+    FOR layer IN layers:
       x ← layer(x)
     RETURN squeeze(x)
 ```
@@ -187,21 +198,21 @@ CLASS: ValueFunctionApproximator
     v0_net : MonotonicValueNetwork
     v1_net : MonotonicValueNetwork
 
-  CONSTRUCTOR(hidden_sizes):
-    v0_net ← MonotonicValueNetwork(hidden_sizes)
-    v1_net ← MonotonicValueNetwork(hidden_sizes)
+  CONSTRUCTOR(hidden_sizes: List[Int])
+    v0_net ← MonotonicValueNetwork(hidden_sizes=hidden_sizes)
+    v1_net ← MonotonicValueNetwork(hidden_sizes=hidden_sizes)
 
-  METHOD: FORWARD(s)
-    v0 ← v0_net(s)
-    v1 ← v1_net(s)
-    RETURN v0, v1
+  METHOD: FORWARD(s: Vector[n]) → Tuple[Vector[n], Vector[n]]
+    v0 : Vector[n] ← v0_net.FORWARD(s)
+    v1 : Vector[n] ← v1_net.FORWARD(s)
+    RETURN (v0, v1)
 
-  METHOD: COMPUTE_INTEGRATED_VALUE(s)
-    v0, v1 ← FORWARD(s)
-    RETURN logsumexp(stack(v0, v1))
+  METHOD: COMPUTE_INTEGRATED_VALUE(s: Vector[n]) → Vector[n]
+    v0 : Vector[n], v1 : Vector[n] ← FORWARD(s)
+    RETURN logsumexp(stack(v0, v1), axis=1)
 
-  METHOD: COMPUTE_CHOICE_PROBABILITY(s)
-    v0, v1 ← FORWARD(s)
+  METHOD: COMPUTE_CHOICE_PROBABILITY(s: Vector[n]) → Vector[n]
+    v0 : Vector[n], v1 : Vector[n] ← FORWARD(s)
     RETURN sigmoid(v1 - v0)
 ```
 
@@ -211,94 +222,160 @@ CLASS: ValueFunctionApproximator
 
 ```
 ALGORITHM: SolveValueFunction
-INPUT: state_grid, β, γ, δ, tolerance, max_iterations
-OUTPUT: V (integrated value function), v₀, v₁ (choice-specific values)
+─────────────────────────────
+INPUT:
+  state_grid     : StateGrid        # Discretized state space, length n
+  β              : Scalar           # Reward coefficient on state
+  γ              : Scalar           # State decay rate
+  δ              : Scalar           # Discount factor
+  tolerance      : Scalar           # Convergence tolerance
+  max_iterations : Int              # Maximum iterations
 
-1. V ← INITIALIZE_VALUE_FUNCTION(state_grid)
+OUTPUT:
+  V  : Vector[n]                    # Integrated value function
+  v₀ : Vector[n]                    # Choice-specific value for action 0
+  v₁ : Vector[n]                    # Choice-specific value for action 1
 
-2. FOR iteration = 1 TO max_iterations:
-   
-   a. v₀ ← COMPUTE_CHOICE_VALUE(V, state_grid, action=0, β, γ, δ)
-   b. v₁ ← COMPUTE_CHOICE_VALUE(V, state_grid, action=1, β, γ, δ)
-   
-   c. V_new ← COMPUTE_INTEGRATED_VALUE(v₀, v₁)
-   
-   d. IF CHECK_CONVERGENCE(V, V_new, tolerance):
-        RETURN V_new, v₀, v₁
-   
-   e. V ← V_new
+PROCEDURE:
+  1. V : Vector[n] ← INITIALIZE_VALUE_FUNCTION(state_grid)
 
-3. WARN("Did not converge")
-   RETURN V, v₀, v₁
+  2. FOR iteration : Int = 1 TO max_iterations:
+     
+     a. v₀ : Vector[n] ← COMPUTE_CHOICE_VALUE(V, state_grid, action=0, β, γ, δ)
+     b. v₁ : Vector[n] ← COMPUTE_CHOICE_VALUE(V, state_grid, action=1, β, γ, δ)
+     
+     c. V_new : Vector[n] ← COMPUTE_INTEGRATED_VALUE(v₀, v₁)
+     
+     d. IF CHECK_CONVERGENCE(V, V_new, tolerance):
+          RETURN (V_new, v₀, v₁)
+     
+     e. V ← V_new
+
+  3. WARN("Did not converge")
+     RETURN (V, v₀, v₁)
 ```
 
 ### Subroutines
 
 ```
-SUBROUTINE: INITIALIZE_VALUE_FUNCTION(state_grid)
-────────────────────────────────────────────────
-  RETURN zeros(length(state_grid))
+SUBROUTINE: INITIALIZE_VALUE_FUNCTION
+─────────────────────────────────────
+  INPUT:  state_grid : StateGrid
+  OUTPUT: V : Vector[n]
+
+  n : Int ← length(state_grid)
+  RETURN zeros(n)
 ```
 
 ```
-SUBROUTINE: COMPUTE_CHOICE_VALUE(V, state_grid, action, β, γ, δ)
-────────────────────────────────────────────────────────────────
+SUBROUTINE: COMPUTE_CHOICE_VALUE
+────────────────────────────────
+  INPUT:
+    V          : Vector[n]      # Current value function
+    state_grid : StateGrid      # State grid
+    action     : Action         # Action (0 or 1)
+    β          : Scalar         # Reward coefficient
+    γ          : Scalar         # Decay rate
+    δ          : Scalar         # Discount factor
+  OUTPUT:
+    v : Vector[n]               # Choice-specific value
+
   # Step 1: Compute flow reward
-  reward ← COMPUTE_REWARD(state_grid, action, β)
+  reward : Vector[n] ← COMPUTE_REWARD(s=state_grid, action=action, β=β)
   
   # Step 2: Compute next states
-  next_states ← COMPUTE_NEXT_STATE(state_grid, action, γ)
+  next_states : Vector[n] ← COMPUTE_NEXT_STATE(s=state_grid, action=action, γ=γ)
   
   # Step 3: Interpolate continuation value at next states
-  continuation ← INTERPOLATE_VALUE(V, state_grid, next_states)
+  continuation : Vector[n] ← INTERPOLATE_VALUE(V=V, state_grid=state_grid, query_states=next_states)
   
   # Step 4: Combine flow reward and discounted continuation
   RETURN reward + δ * continuation
 ```
 
 ```
-SUBROUTINE: COMPUTE_REWARD(s, action, β)
-────────────────────────────────────────
+SUBROUTINE: COMPUTE_REWARD
+──────────────────────────
+  INPUT:
+    s      : Vector[n]    # State(s)
+    action : Action       # Action (0 or 1)
+    β      : Scalar       # Reward coefficient
+  OUTPUT:
+    reward : Vector[n]    # Flow reward
+
   RETURN β * s - action
 ```
 
 ```
-SUBROUTINE: COMPUTE_NEXT_STATE(s, action, γ)
-────────────────────────────────────────────
+SUBROUTINE: COMPUTE_NEXT_STATE
+──────────────────────────────
+  INPUT:
+    s      : Vector[n]    # Current state(s)
+    action : Action       # Action (0 or 1)
+    γ      : Scalar       # Decay rate
+  OUTPUT:
+    s_next : Vector[n]    # Next state(s)
+
   RETURN (1 - γ) * s + action
 ```
 
 ```
-SUBROUTINE: INTERPOLATE_VALUE(V, state_grid, query_states)
-──────────────────────────────────────────────────────────
+SUBROUTINE: INTERPOLATE_VALUE
+─────────────────────────────
+  INPUT:
+    V            : Vector[n]    # Value function on grid
+    state_grid   : StateGrid    # Grid points
+    query_states : Vector[m]    # Points to interpolate
+  OUTPUT:
+    V_interp : Vector[m]        # Interpolated values
+
   # Linear interpolation with boundary extrapolation
   RETURN linear_interpolate(
     x=state_grid,
     y=V,
     query=query_states,
-    extrapolate=boundary_values
+    extrapolate="boundary"
   )
 ```
 
 ```
-SUBROUTINE: COMPUTE_INTEGRATED_VALUE(v₀, v₁)
-────────────────────────────────────────────
+SUBROUTINE: COMPUTE_INTEGRATED_VALUE
+────────────────────────────────────
+  INPUT:
+    v₀ : Vector[n]    # Choice-specific value for action 0
+    v₁ : Vector[n]    # Choice-specific value for action 1
+  OUTPUT:
+    V : Vector[n]     # Integrated value function
+
   # Log-sum-exp formula (Emax with Type-I EV shocks)
   RETURN log(exp(v₀) + exp(v₁))
 ```
 
 ```
-SUBROUTINE: CHECK_CONVERGENCE(V_old, V_new, tolerance)
-──────────────────────────────────────────────────────
-  diff ← max(|V_new - V_old|)
+SUBROUTINE: CHECK_CONVERGENCE
+─────────────────────────────
+  INPUT:
+    V_old     : Vector[n]    # Previous value function
+    V_new     : Vector[n]    # Updated value function
+    tolerance : Scalar       # Convergence threshold
+  OUTPUT:
+    converged : Bool         # True if converged
+
+  diff : Scalar ← max(|V_new - V_old|)
   RETURN diff < tolerance
 ```
 
 ### Derived Quantities
 
 ```
-SUBROUTINE: COMPUTE_CHOICE_PROBABILITY(v₀, v₁)
-──────────────────────────────────────────────
+SUBROUTINE: COMPUTE_CHOICE_PROBABILITY
+──────────────────────────────────────
+  INPUT:
+    v₀ : Vector[n]    # Choice-specific value for action 0
+    v₁ : Vector[n]    # Choice-specific value for action 1
+  OUTPUT:
+    p : Vector[n]     # Probability of choosing action 1
+
   # Logit formula: P(a=1|s)
   RETURN exp(v₁) / (exp(v₀) + exp(v₁))
   
