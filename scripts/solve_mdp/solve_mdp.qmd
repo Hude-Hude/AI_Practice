@@ -99,6 +99,262 @@ where $\Lambda(x) = \frac{1}{1 + e^{-x}}$ is the logistic function.
 
 The optimal policy is a **stochastic Markov policy**: the choice probability depends only on the current state $s$ through the value difference $v(s, 1) - v(s, 0)$.
 
+## Neural Network Architecture
+
+We approximate each action's choice-specific value function $v(s, a)$ using a **monotonic neural network**. Since higher states yield higher rewards ($\beta > 0$), we expect $v(s, a)$ to be increasing in $s$. Enforcing monotonicity as an architectural constraint improves extrapolation and ensures economically sensible behavior.
+
+### Monotonic Neural Networks
+
+A feed-forward neural network is **monotonically increasing** in its input if:
+
+1. All weights are **non-negative**
+2. All activation functions are **monotonically increasing**
+
+For a single hidden layer network:
+$$
+v_\theta(s, a) = W_2^{(a)} \cdot \sigma\left( W_1^{(a)} \cdot s + b_1^{(a)} \right) + b_2^{(a)}
+$$
+
+where $W_1^{(a)} \geq 0$, $W_2^{(a)} \geq 0$, and $\sigma$ is a monotonic activation.
+
+### Softplus Activation
+
+We use the **softplus** activation function:
+$$
+\sigma(x) = \log(1 + e^x)
+$$
+
+Properties:
+
+- Monotonically increasing: $\sigma'(x) = \frac{e^x}{1 + e^x} = \text{sigmoid}(x) > 0$
+- Smooth approximation to ReLU: $\sigma(x) \approx \max(0, x)$ for large $|x|$
+- Differentiable everywhere (unlike ReLU)
+
+### Weight Parameterization
+
+To enforce non-negative weights, we parameterize the weights using softplus of unconstrained parameters:
+$$
+W = \log(1 + e^{\tilde{W}})
+$$
+
+where $\tilde{W} \in \mathbb{R}$ is the learnable parameter. This ensures $W > 0$ while allowing gradient-based optimization.
+
+### Architecture
+
+```{python}
+import torch
+import torch.nn as nn
+
+
+class MonotonicLayer(nn.Module):
+    """
+    A linear layer with non-negative weights (monotonic in inputs).
+    
+    Weights are parameterized as softplus of unconstrained parameters.
+    """
+    
+    def __init__(self, in_features, out_features, bias=True):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        
+        # Unconstrained weight parameters
+        self.weight_raw = nn.Parameter(torch.randn(out_features, in_features))
+        
+        # Bias (unconstrained)
+        if bias:
+            self.bias = nn.Parameter(torch.zeros(out_features))
+        else:
+            self.register_parameter("bias", None)
+    
+    def forward(self, x):
+        # Apply softplus to get non-negative weights
+        weight = nn.functional.softplus(self.weight_raw)
+        return nn.functional.linear(input=x, weight=weight, bias=self.bias)
+
+
+class MonotonicValueNetwork(nn.Module):
+    """
+    Monotonic neural network for approximating value functions.
+    
+    Ensures output is monotonically increasing in input state.
+    
+    Parameters
+    ----------
+    hidden_sizes : list of int
+        Number of units in each hidden layer
+    """
+    
+    def __init__(self, hidden_sizes):
+        super().__init__()
+        
+        layers = []
+        in_size = 1  # Single state input
+        
+        for hidden_size in hidden_sizes:
+            layers.append(MonotonicLayer(in_features=in_size, out_features=hidden_size))
+            layers.append(nn.Softplus())
+            in_size = hidden_size
+        
+        # Output layer (single value output)
+        layers.append(MonotonicLayer(in_features=in_size, out_features=1))
+        
+        self.network = nn.Sequential(*layers)
+    
+    def forward(self, s):
+        """
+        Compute value function at state(s).
+        
+        Parameters
+        ----------
+        s : torch.Tensor
+            State(s), shape (batch_size,) or (batch_size, 1)
+        
+        Returns
+        -------
+        torch.Tensor
+            Value(s), shape (batch_size,)
+        """
+        if s.dim() == 1:
+            s = s.unsqueeze(dim=-1)
+        return self.network(s).squeeze(dim=-1)
+```
+
+### Value Function Approximator
+
+We create separate monotonic networks for each action:
+
+```{python}
+class ValueFunctionApproximator(nn.Module):
+    """
+    Approximates choice-specific value functions v(s, 0) and v(s, 1).
+    
+    Uses separate monotonic networks for each action.
+    
+    Parameters
+    ----------
+    hidden_sizes : list of int
+        Hidden layer sizes for each network
+    """
+    
+    def __init__(self, hidden_sizes):
+        super().__init__()
+        self.v0_net = MonotonicValueNetwork(hidden_sizes=hidden_sizes)
+        self.v1_net = MonotonicValueNetwork(hidden_sizes=hidden_sizes)
+    
+    def forward(self, s):
+        """
+        Compute choice-specific values for both actions.
+        
+        Parameters
+        ----------
+        s : torch.Tensor
+            State(s)
+        
+        Returns
+        -------
+        v0 : torch.Tensor
+            Value of action 0
+        v1 : torch.Tensor
+            Value of action 1
+        """
+        v0 = self.v0_net(s)
+        v1 = self.v1_net(s)
+        return v0, v1
+    
+    def integrated_value(self, s):
+        """
+        Compute integrated value function (log-sum-exp).
+        
+        Parameters
+        ----------
+        s : torch.Tensor
+            State(s)
+        
+        Returns
+        -------
+        torch.Tensor
+            Integrated value V(s)
+        """
+        v0, v1 = self.forward(s)
+        return torch.logsumexp(torch.stack([v0, v1], dim=-1), dim=-1)
+    
+    def choice_probability(self, s):
+        """
+        Compute probability of choosing action 1.
+        
+        Parameters
+        ----------
+        s : torch.Tensor
+            State(s)
+        
+        Returns
+        -------
+        torch.Tensor
+            P(a=1|s)
+        """
+        v0, v1 = self.forward(s)
+        return torch.sigmoid(v1 - v0)
+```
+
+### Verify Monotonicity
+
+```{python}
+# Create network and verify monotonicity
+torch.manual_seed(42)
+nn_value = ValueFunctionApproximator(hidden_sizes=[32, 32])
+
+# Test on a grid
+s_test = torch.linspace(start=0.0, end=10.0, steps=100)
+with torch.no_grad():
+    v0_nn, v1_nn = nn_value(s_test)
+
+# Check monotonicity: differences should be non-negative
+v0_diff = torch.diff(v0_nn)
+v1_diff = torch.diff(v1_nn)
+
+print(f"v(s, 0) monotonically increasing: {(v0_diff >= -1e-6).all().item()}")
+print(f"v(s, 1) monotonically increasing: {(v1_diff >= -1e-6).all().item()}")
+print(f"Min increment v0: {v0_diff.min().item():.6f}")
+print(f"Min increment v1: {v1_diff.min().item():.6f}")
+```
+
+### Visualize Network Output (Untrained)
+
+```{python}
+#| label: fig-nn-untrained
+#| fig-cap: "Monotonic neural network output (untrained, random initialization)"
+
+fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(12, 5))
+
+s_plot = torch.linspace(start=0.0, end=10.0, steps=200)
+with torch.no_grad():
+    v0_plot, v1_plot = nn_value(s_plot)
+
+ax = axes[0]
+ax.plot(s_plot.numpy(), v0_plot.numpy(), label="$v_\\theta(s, 0)$", linewidth=2)
+ax.plot(s_plot.numpy(), v1_plot.numpy(), label="$v_\\theta(s, 1)$", linewidth=2)
+ax.set_xlabel("State $s$")
+ax.set_ylabel("Value")
+ax.set_title("Choice-Specific Values (Untrained)")
+ax.legend()
+ax.grid(alpha=0.3)
+
+ax = axes[1]
+with torch.no_grad():
+    prob_plot = nn_value.choice_probability(s_plot)
+ax.plot(s_plot.numpy(), prob_plot.numpy(), color="darkred", linewidth=2)
+ax.axhline(y=0.5, color="gray", linestyle="--", alpha=0.5)
+ax.set_xlabel("State $s$")
+ax.set_ylabel("$P(a=1|s)$")
+ax.set_title("Choice Probability (Untrained)")
+ax.set_ylim([-0.05, 1.05])
+ax.grid(alpha=0.3)
+
+plt.tight_layout()
+plt.show()
+```
+
 ## Implementation
 
 ```{python}
