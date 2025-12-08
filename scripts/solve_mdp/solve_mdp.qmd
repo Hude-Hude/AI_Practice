@@ -13,16 +13,20 @@ jupyter: python3
 
 We consider a dynamic discrete choice model with:
 
-- **State**: $s \in \mathbb{R}$ (continuous, discretized on a grid)
+- **State**: $s \in \mathbb{R}_{\geq 0}$ (continuous, non-negative, discretized on a grid)
 - **Action**: $a \in \{0, 1\}$ (binary choice)
-- **Mean reward**: $u(s, a) = \beta s - a$
+- **Mean reward**: $u(s, a) = \beta \log(1 + s) - a$
 - **State transition**: $s' = (1 - \gamma) s + a$ (deterministic)
 - **Discount factor**: $\delta$
 - **Shocks**: $\varepsilon_a \sim$ Type-I Extreme Value (iid across actions and time)
 
 ### Interpretation
 
-- Higher state $s$ yields higher flow payoff (coefficient $\beta > 0$)
+- Higher state $s$ yields higher flow payoff, but with **diminishing marginal returns**
+- The $\log(1 + s)$ specification ensures:
+  - Marginal utility $\frac{\partial u}{\partial s} = \frac{\beta}{1 + s} > 0$ (increasing in $s$)
+  - Diminishing: $\frac{\partial^2 u}{\partial s^2} = -\frac{\beta}{(1 + s)^2} < 0$ (concave)
+  - Well-defined at $s = 0$: $u(0, a) = -a$
 - Action $a = 1$ costs 1 unit but boosts next period's state by 1
 - Action $a = 0$ is free but state decays toward zero at rate $\gamma$
 
@@ -55,7 +59,7 @@ $$
 
 Substituting the reward and transition:
 $$
-v(s, a) = \beta s - a + \delta \bar{V}\bigl((1 - \gamma) s + a\bigr)
+v(s, a) = \beta \log(1 + s) - a + \delta \bar{V}\bigl((1 - \gamma) s + a\bigr)
 $$
 where $\bar{V}(s) = \mathbb{E}_\varepsilon[V(s, \varepsilon)]$ is the **integrated (ex-ante) value function**.
 
@@ -304,7 +308,7 @@ SUBROUTINE: COMPUTE_REWARD
   OUTPUT:
     reward : Vector[n]    # Flow reward
 
-  RETURN β * s - action
+  RETURN β * log(1 + s) - action
 ```
 
 ```
