@@ -130,7 +130,8 @@ class TestComputeChoiceValue:
                 V=V, state_grid=state_grid, action=action,
                 beta=beta, gamma=gamma, delta=delta
             )
-            expected_reward = beta * state_grid - action
+            # Reward is β * log(1 + s) - action
+            expected_reward = beta * np.log(1 + state_grid) - action
             np.testing.assert_array_almost_equal(v, expected_reward)
 
     def test_discount_factor_effect(self) -> None:

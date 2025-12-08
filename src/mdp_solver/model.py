@@ -1,5 +1,7 @@
 """Model primitives for the MDP."""
 
+import numpy as np
+
 from mdp_solver.types import Action, Scalar, Vector
 
 
@@ -9,9 +11,9 @@ def compute_reward(
     beta: Scalar,
 ) -> Vector:
     """
-    Compute flow reward.
+    Compute flow reward with diminishing marginal returns.
 
-    u(s, a) = β * s - a
+    u(s, a) = β * log(1 + s) - a
 
     Parameters
     ----------
@@ -27,7 +29,7 @@ def compute_reward(
     Vector
         Flow reward for each state
     """
-    return beta * s - action
+    return beta * np.log(1 + s) - action
 
 
 def compute_next_state(

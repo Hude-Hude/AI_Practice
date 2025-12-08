@@ -2,7 +2,7 @@
 Tests for model primitives.
 
 Based on specifications from solve_mdp.qmd:
-- COMPUTE_REWARD: u(s, a) = β * s - a
+- COMPUTE_REWARD: u(s, a) = β * log(1 + s) - a
 - COMPUTE_NEXT_STATE: s' = (1 - γ) * s + a
 """
 
@@ -18,23 +18,23 @@ class TestComputeReward:
     
     Specification:
         INPUT: s (Vector), action (0 or 1), β (Scalar)
-        OUTPUT: reward = β * s - action
+        OUTPUT: reward = β * log(1 + s) - action
     """
 
     def test_formula_action_zero(self) -> None:
-        """u(s, 0) = β * s - 0 = β * s."""
+        """u(s, 0) = β * log(1 + s)."""
         s = np.array([1.0, 2.0, 3.0])
         beta = 2.0
         result = compute_reward(s=s, action=0, beta=beta)
-        expected = beta * s - 0
+        expected = beta * np.log(1 + s)
         np.testing.assert_array_almost_equal(result, expected)
 
     def test_formula_action_one(self) -> None:
-        """u(s, 1) = β * s - 1."""
+        """u(s, 1) = β * log(1 + s) - 1."""
         s = np.array([1.0, 2.0, 3.0])
         beta = 2.0
         result = compute_reward(s=s, action=1, beta=beta)
-        expected = beta * s - 1
+        expected = beta * np.log(1 + s) - 1
         np.testing.assert_array_almost_equal(result, expected)
 
     def test_action_one_costs_one_unit(self) -> None:
@@ -46,27 +46,37 @@ class TestComputeReward:
         np.testing.assert_array_almost_equal(reward_0 - reward_1, np.ones_like(s))
 
     def test_higher_state_higher_reward(self) -> None:
-        """With β > 0, higher state should yield higher reward."""
+        """With β > 0, higher state should yield higher reward (log is monotonic)."""
         s = np.array([1.0, 5.0, 10.0])
         beta = 1.0
         reward = compute_reward(s=s, action=0, beta=beta)
         assert np.all(np.diff(reward) > 0)
 
+    def test_diminishing_marginal_returns(self) -> None:
+        """Marginal reward should decrease with state (concavity of log)."""
+        # Use uniform spacing to properly test diminishing returns
+        s = np.linspace(0.0, 10.0, 50)
+        beta = 1.0
+        reward = compute_reward(s=s, action=0, beta=beta)
+        marginal = np.diff(reward)
+        # Marginal returns should be decreasing (each step contributes less)
+        assert np.all(np.diff(marginal) < 0)
+
     def test_beta_scales_linearly(self) -> None:
-        """Doubling β should double the state contribution."""
+        """Doubling β should double the state contribution (log part)."""
         s = np.array([2.0, 4.0])
         reward_beta1 = compute_reward(s=s, action=0, beta=1.0)
         reward_beta2 = compute_reward(s=s, action=0, beta=2.0)
         np.testing.assert_array_almost_equal(reward_beta2, 2 * reward_beta1)
 
     def test_zero_state_action_zero(self) -> None:
-        """u(0, 0) = 0."""
+        """u(0, 0) = β * log(1) = 0."""
         s = np.array([0.0])
         result = compute_reward(s=s, action=0, beta=1.0)
         np.testing.assert_array_almost_equal(result, np.array([0.0]))
 
     def test_zero_state_action_one(self) -> None:
-        """u(0, 1) = -1."""
+        """u(0, 1) = β * log(1) - 1 = -1."""
         s = np.array([0.0])
         result = compute_reward(s=s, action=1, beta=1.0)
         np.testing.assert_array_almost_equal(result, np.array([-1.0]))
@@ -76,6 +86,14 @@ class TestComputeReward:
         s = np.linspace(start=0.0, stop=10.0, num=100)
         result = compute_reward(s=s, action=0, beta=1.0)
         assert result.shape == s.shape
+
+    def test_specific_values(self) -> None:
+        """Test specific known values."""
+        beta = 1.0
+        # u(e-1, 0) = log(e) = 1
+        s = np.array([np.e - 1])
+        result = compute_reward(s=s, action=0, beta=beta)
+        np.testing.assert_array_almost_equal(result, np.array([1.0]))
 
 
 class TestComputeNextState:
