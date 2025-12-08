@@ -6,6 +6,7 @@ format:
     code-fold: false
     toc: true
     toc-depth: 3
+jupyter: python3
 ---
 
 ## Model Setup
@@ -380,6 +381,216 @@ SUBROUTINE: COMPUTE_CHOICE_PROBABILITY
   RETURN exp(v₁) / (exp(v₀) + exp(v₁))
   
   # Equivalently: sigmoid(v₁ - v₀)
+```
+
+## Implementation
+
+We implement the MDP solver using the `mdp_solver` package with the following parameters:
+
+- $\beta = 0.5$ (reward coefficient)
+- $\gamma = 0.1$ (state decay rate)
+- $\delta = 0.95$ (discount factor)
+
+```{python}
+import numpy as np
+import matplotlib.pyplot as plt
+from mdp_solver import (
+    solve_value_function,
+    compute_choice_probability,
+)
+from mdp_solver.value_iteration import (
+    initialize_value_function,
+    compute_choice_value,
+    compute_integrated_value,
+)
+```
+
+### Parameters
+
+```{python}
+# Model parameters
+beta = 0.5      # Reward coefficient on state
+gamma = 0.1     # State decay rate
+delta = 0.95    # Discount factor
+
+# State space
+n_states = 200
+s_min, s_max = 0.0, 15.0
+state_grid = np.linspace(start=s_min, stop=s_max, num=n_states)
+
+print(f"Parameters: β = {beta}, γ = {gamma}, δ = {delta}")
+print(f"State grid: [{s_min}, {s_max}] with {n_states} points")
+```
+
+### Solve the Model with Convergence Tracking
+
+```{python}
+# Solve with convergence tracking
+tolerance = 1e-10
+max_iterations = 1000
+
+# Initialize
+V = initialize_value_function(state_grid=state_grid)
+errors = []
+
+for iteration in range(max_iterations):
+    # Compute choice-specific values
+    v0_iter = compute_choice_value(
+        V=V, state_grid=state_grid, action=0,
+        beta=beta, gamma=gamma, delta=delta
+    )
+    v1_iter = compute_choice_value(
+        V=V, state_grid=state_grid, action=1,
+        beta=beta, gamma=gamma, delta=delta
+    )
+    
+    # Compute integrated value
+    V_new = compute_integrated_value(v0=v0_iter, v1=v1_iter)
+    
+    # Track error
+    error = np.max(np.abs(V_new - V))
+    errors.append(error)
+    
+    # Check convergence
+    if error < tolerance:
+        n_iter = iteration + 1
+        break
+    
+    V = V_new
+else:
+    n_iter = max_iterations
+
+# Final values
+V = V_new
+v0 = compute_choice_value(
+    V=V, state_grid=state_grid, action=0,
+    beta=beta, gamma=gamma, delta=delta
+)
+v1 = compute_choice_value(
+    V=V, state_grid=state_grid, action=1,
+    beta=beta, gamma=gamma, delta=delta
+)
+
+print(f"Converged in {n_iter} iterations")
+print(f"Final error: {errors[-1]:.2e}")
+```
+
+### Convergence Plot
+
+```{python}
+#| label: fig-convergence
+#| fig-cap: "Convergence of value function iteration"
+
+fig, ax = plt.subplots(figsize=(8, 5))
+
+ax.semilogy(range(1, len(errors) + 1), errors, linewidth=2, color="darkgreen")
+ax.axhline(y=tolerance, color="red", linestyle="--", alpha=0.7, label=f"Tolerance = {tolerance:.0e}")
+ax.set_xlabel("Iteration")
+ax.set_ylabel("Error (max |V_new - V_old|)")
+ax.set_title("Convergence of Value Function Iteration")
+ax.legend()
+ax.grid(alpha=0.3)
+
+plt.tight_layout()
+plt.show()
+
+print(f"Error at iteration 1: {errors[0]:.4f}")
+print(f"Error at iteration 10: {errors[9]:.4f}")
+print(f"Error at iteration 50: {errors[49]:.4f}")
+print(f"Error at iteration 100: {errors[99]:.6f}")
+```
+
+### Compute Choice Probabilities
+
+```{python}
+prob_a1 = compute_choice_probability(v0=v0, v1=v1)
+```
+
+### Results
+
+#### Value Functions
+
+```{python}
+#| label: fig-value-functions
+#| fig-cap: "Value functions by state"
+
+fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(12, 5))
+
+# Plot choice-specific values
+ax = axes[0]
+ax.plot(state_grid, v0, label="$v(s, 0)$", linewidth=2)
+ax.plot(state_grid, v1, label="$v(s, 1)$", linewidth=2)
+ax.set_xlabel("State $s$")
+ax.set_ylabel("Choice-specific value")
+ax.set_title("Choice-Specific Value Functions")
+ax.legend()
+ax.grid(alpha=0.3)
+
+# Plot integrated value
+ax = axes[1]
+ax.plot(state_grid, V, color="black", linewidth=2)
+ax.set_xlabel("State $s$")
+ax.set_ylabel("$V(s)$")
+ax.set_title("Integrated Value Function (Emax)")
+ax.grid(alpha=0.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+#### Choice Probabilities
+
+```{python}
+#| label: fig-choice-prob
+#| fig-cap: "Probability of choosing action 1 by state"
+
+fig, ax = plt.subplots(figsize=(8, 5))
+
+ax.plot(state_grid, prob_a1, color="darkred", linewidth=2)
+ax.axhline(y=0.5, color="gray", linestyle="--", alpha=0.5)
+ax.set_xlabel("State $s$")
+ax.set_ylabel("$P(a = 1 | s)$")
+ax.set_title("Probability of Action 1")
+ax.set_ylim([-0.05, 1.05])
+ax.grid(alpha=0.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+#### Policy Interpretation
+
+```{python}
+# Find threshold state where choice probability crosses 50%
+threshold_idx = np.argmin(np.abs(prob_a1 - 0.5))
+threshold_state = state_grid[threshold_idx]
+
+print(f"Model parameters: β = {beta}, γ = {gamma}, δ = {delta}")
+print(f"Threshold state (P(a=1) ≈ 0.5): s ≈ {threshold_state:.2f}")
+print(f"At s = {s_min:.1f}: P(a=1) = {prob_a1[0]:.3f}")
+print(f"At s = {s_max:.1f}: P(a=1) = {prob_a1[-1]:.3f}")
+```
+
+#### Value Function Difference
+
+The choice depends on $v(s, 1) - v(s, 0)$:
+
+```{python}
+#| label: fig-value-diff
+#| fig-cap: "Difference in choice-specific values"
+
+fig, ax = plt.subplots(figsize=(8, 5))
+
+v_diff = v1 - v0
+ax.plot(state_grid, v_diff, color="darkblue", linewidth=2)
+ax.axhline(y=0, color="gray", linestyle="--", alpha=0.5)
+ax.set_xlabel("State $s$")
+ax.set_ylabel("$v(s, 1) - v(s, 0)$")
+ax.set_title("Value Difference (Action 1 minus Action 0)")
+ax.grid(alpha=0.3)
+
+plt.tight_layout()
+plt.show()
 ```
 
 ## Summary
