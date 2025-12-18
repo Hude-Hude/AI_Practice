@@ -522,16 +522,29 @@ Key properties:
 
 ## Implementation
 
+### Setup
+
 ```{python}
-import torch
-import numpy as np
-import matplotlib.pyplot as plt
+#| label: setup
+#| cache: false
 
-# Add project root to path
+# Standard libraries
 import sys
-sys.path.insert(0, "../../src")
+import numpy as np
+import torch
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 
-from mdp_solver import solve_value_function, compute_choice_probability, evaluate_network, compute_integrated_value
+# Add project root to path and import MDP solver
+sys.path.insert(0, "../../src")
+from mdp_solver import (
+    solve_value_function,
+    compute_choice_probability,
+    evaluate_network,
+    compute_integrated_value,
+)
+
+print("Modules loaded successfully")
 ```
 
 ### Model Parameters
@@ -697,11 +710,10 @@ This section examines how the value functions change as we vary the reward coeff
 
 ```{python}
 #| label: comparative-statics-setup
-
-import matplotlib.colors as mcolors
+#| cache: true
 
 def solve_and_extract_values(beta_val):
-    """Solve MDP and extract value functions for given beta."""
+    """Solve MDP and extract value functions and choice probabilities for given beta."""
     torch.manual_seed(42)
     v0_net_cs, v1_net_cs, _, _ = solve_value_function(
         beta=beta_val,
@@ -718,7 +730,10 @@ def solve_and_extract_values(beta_val):
     with torch.no_grad():
         v0_vals = evaluate_network(v0_net_cs, s_eval).numpy()
         v1_vals = evaluate_network(v1_net_cs, s_eval).numpy()
-    return v0_vals, v1_vals
+        p0_vals, p1_vals = compute_choice_probability(v0_net_cs, v1_net_cs, s_eval)
+        p0_vals = p0_vals.numpy()
+        p1_vals = p1_vals.numpy()
+    return v0_vals, v1_vals, p0_vals, p1_vals
 
 # Beta values from 0 to 2 in steps of 0.25
 beta_values = np.arange(0, 2.25, 0.25)
@@ -728,8 +743,8 @@ n_beta = len(beta_values)
 print("Solving for different β values...")
 results_beta = {}
 for b in beta_values:
-    v0_vals, v1_vals = solve_and_extract_values(b)
-    results_beta[b] = {'v0': v0_vals, 'v1': v1_vals}
+    v0_vals, v1_vals, p0_vals, p1_vals = solve_and_extract_values(b)
+    results_beta[b] = {'v0': v0_vals, 'v1': v1_vals, 'p0': p0_vals, 'p1': p1_vals}
     print(f"  β = {b:.2f} done")
 print("Complete!")
 
@@ -781,7 +796,52 @@ plt.tight_layout()
 plt.show()
 ```
 
-### Summary
+### Choice Probabilities by Action
+
+```{python}
+#| fig-cap: "Choice probabilities P(a|s) as β varies from 0 to 2. Left: P(a=0|s) (black→blue). Right: P(a=1|s) (black→red)."
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+# Plot P(a=0|s) - No investment (black to blue)
+ax0 = axes[0]
+for i, b in enumerate(beta_values):
+    color = cmap_blue(i / (n_beta - 1))
+    ax0.plot(s_np, results_beta[b]['p0'], color=color, linewidth=1.5, alpha=0.8)
+ax0.set_xlabel('State s')
+ax0.set_ylabel('P(a=0|s)')
+ax0.set_title('Choice Probability: No Investment (a=0)')
+ax0.set_ylim(0, 1)
+ax0.grid(True, alpha=0.3)
+
+# Add colorbar
+sm0 = plt.cm.ScalarMappable(cmap=cmap_blue, norm=plt.Normalize(vmin=0, vmax=2))
+sm0.set_array([])
+cbar0 = plt.colorbar(sm0, ax=ax0)
+cbar0.set_label('β')
+
+# Plot P(a=1|s) - Investment (black to red)
+ax1 = axes[1]
+for i, b in enumerate(beta_values):
+    color = cmap_red(i / (n_beta - 1))
+    ax1.plot(s_np, results_beta[b]['p1'], color=color, linewidth=1.5, alpha=0.8)
+ax1.set_xlabel('State s')
+ax1.set_ylabel('P(a=1|s)')
+ax1.set_title('Choice Probability: Investment (a=1)')
+ax1.set_ylim(0, 1)
+ax1.grid(True, alpha=0.3)
+
+# Add colorbar
+sm1 = plt.cm.ScalarMappable(cmap=cmap_red, norm=plt.Normalize(vmin=0, vmax=2))
+sm1.set_array([])
+cbar1 = plt.colorbar(sm1, ax=ax1)
+cbar1.set_label('β')
+
+plt.tight_layout()
+plt.show()
+```
+
+### Summary (β)
 
 ```{python}
 print("Comparative Statics Summary: Effect of β on Value Functions")
@@ -794,3 +854,188 @@ print("• v(s,0) and v(s,1) both become steeper (more sensitive to state)")
 print("• At β=0, values are purely from discounted future option value")
 print("• At high β, current-period rewards dominate the value functions")
 ```
+
+## Comparative Statics: Effect of γ on Value Functions
+
+This section examines how the value functions change as we vary the decay rate γ from 0 to 0.1.
+
+```{python}
+#| label: comparative-statics-gamma
+#| cache: true
+
+def solve_and_extract_values_gamma(gamma_val):
+    """Solve MDP and extract value functions and choice probabilities for given gamma."""
+    torch.manual_seed(42)
+    v0_net_cs, v1_net_cs, _, _ = solve_value_function(
+        beta=beta,
+        gamma=gamma_val,
+        delta=delta,
+        s_min=s_min,
+        s_max=s_max,
+        hidden_sizes=hidden_sizes,
+        learning_rate=learning_rate,
+        batch_size=batch_size,
+        tolerance=tolerance,
+        max_iterations=max_iterations,
+    )
+    with torch.no_grad():
+        v0_vals = evaluate_network(v0_net_cs, s_eval).numpy()
+        v1_vals = evaluate_network(v1_net_cs, s_eval).numpy()
+        p0_vals, p1_vals = compute_choice_probability(v0_net_cs, v1_net_cs, s_eval)
+        p0_vals = p0_vals.numpy()
+        p1_vals = p1_vals.numpy()
+    return v0_vals, v1_vals, p0_vals, p1_vals
+
+# Gamma values from 0 to 0.1 in steps of 0.025
+gamma_values = np.arange(0, 0.125, 0.025)
+n_gamma = len(gamma_values)
+
+# Solve for all gamma values
+print("Solving for different γ values...")
+results_gamma = {}
+for g in gamma_values:
+    v0_vals, v1_vals, p0_vals, p1_vals = solve_and_extract_values_gamma(g)
+    results_gamma[g] = {'v0': v0_vals, 'v1': v1_vals, 'p0': p0_vals, 'p1': p1_vals}
+    print(f"  γ = {g:.3f} done")
+print("Complete!")
+```
+
+### Value Functions by Action (γ)
+
+```{python}
+#| fig-cap: "Value functions v(s,a) as γ varies from 0 to 0.1. Left: a=0 (black→blue). Right: a=1 (black→red)."
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+# Plot v(s, 0) - No investment (black to blue)
+ax0 = axes[0]
+for i, g in enumerate(gamma_values):
+    color = cmap_blue(i / (n_gamma - 1))
+    ax0.plot(s_np, results_gamma[g]['v0'], color=color, linewidth=1.5, alpha=0.8)
+ax0.set_xlabel('State s')
+ax0.set_ylabel('v(s, 0)')
+ax0.set_title('Value Function: No Investment (a=0)')
+ax0.grid(True, alpha=0.3)
+
+# Add colorbar
+sm0 = plt.cm.ScalarMappable(cmap=cmap_blue, norm=plt.Normalize(vmin=0, vmax=0.1))
+sm0.set_array([])
+cbar0 = plt.colorbar(sm0, ax=ax0)
+cbar0.set_label('γ')
+
+# Plot v(s, 1) - Investment (black to red)
+ax1 = axes[1]
+for i, g in enumerate(gamma_values):
+    color = cmap_red(i / (n_gamma - 1))
+    ax1.plot(s_np, results_gamma[g]['v1'], color=color, linewidth=1.5, alpha=0.8)
+ax1.set_xlabel('State s')
+ax1.set_ylabel('v(s, 1)')
+ax1.set_title('Value Function: Investment (a=1)')
+ax1.grid(True, alpha=0.3)
+
+# Add colorbar
+sm1 = plt.cm.ScalarMappable(cmap=cmap_red, norm=plt.Normalize(vmin=0, vmax=0.1))
+sm1.set_array([])
+cbar1 = plt.colorbar(sm1, ax=ax1)
+cbar1.set_label('γ')
+
+plt.tight_layout()
+plt.show()
+```
+
+### Choice Probabilities by Action (γ)
+
+```{python}
+#| fig-cap: "Choice probabilities P(a|s) as γ varies from 0 to 0.1. Left: P(a=0|s) (black→blue). Right: P(a=1|s) (black→red)."
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+# Plot P(a=0|s) - No investment (black to blue)
+ax0 = axes[0]
+for i, g in enumerate(gamma_values):
+    color = cmap_blue(i / (n_gamma - 1))
+    ax0.plot(s_np, results_gamma[g]['p0'], color=color, linewidth=1.5, alpha=0.8)
+ax0.set_xlabel('State s')
+ax0.set_ylabel('P(a=0|s)')
+ax0.set_title('Choice Probability: No Investment (a=0)')
+ax0.set_ylim(0, 1)
+ax0.grid(True, alpha=0.3)
+
+# Add colorbar
+sm0 = plt.cm.ScalarMappable(cmap=cmap_blue, norm=plt.Normalize(vmin=0, vmax=0.1))
+sm0.set_array([])
+cbar0 = plt.colorbar(sm0, ax=ax0)
+cbar0.set_label('γ')
+
+# Plot P(a=1|s) - Investment (black to red)
+ax1 = axes[1]
+for i, g in enumerate(gamma_values):
+    color = cmap_red(i / (n_gamma - 1))
+    ax1.plot(s_np, results_gamma[g]['p1'], color=color, linewidth=1.5, alpha=0.8)
+ax1.set_xlabel('State s')
+ax1.set_ylabel('P(a=1|s)')
+ax1.set_title('Choice Probability: Investment (a=1)')
+ax1.set_ylim(0, 1)
+ax1.grid(True, alpha=0.3)
+
+# Add colorbar
+sm1 = plt.cm.ScalarMappable(cmap=cmap_red, norm=plt.Normalize(vmin=0, vmax=0.1))
+sm1.set_array([])
+cbar1 = plt.colorbar(sm1, ax=ax1)
+cbar1.set_label('γ')
+
+plt.tight_layout()
+plt.show()
+```
+
+### Summary (γ)
+
+```{python}
+print("Comparative Statics Summary: Effect of γ on Value Functions")
+print("=" * 60)
+print(f"\nFixed parameters: β={beta}, δ={delta}")
+print(f"γ varied from 0 to 0.1 in steps of 0.025")
+print(f"\nKey observations:")
+print("• As γ increases, state decays faster (s' = (1-γ)s + a)")
+print("• Higher γ reduces value of being in high states (they depreciate quickly)")
+print("• At γ=0, state persists forever")
+print("• Investment (a=1) becomes relatively more valuable at high γ to maintain state")
+```
+
+## Conclusion
+
+### Interpretation of Comparative Statics
+
+The comparative statics analysis reveals how the model parameters shape the agent's value functions and optimal behavior in this dynamic discrete choice problem.
+
+#### Effect of the Reward Coefficient (β)
+
+The parameter β governs the **marginal value of the state** through the reward function $u(s, a) = \beta \log(1 + s) - a$:
+
+- **Higher β amplifies the reward from being in a high state.** As β increases from 0 to 2, both value functions $v(s, 0)$ and $v(s, 1)$ shift upward and become steeper. This reflects the increased payoff from accumulating state.
+
+- **At β = 0**, the flow reward is simply $-a$ (just the cost of investment). The value functions are relatively flat because the state provides no direct reward—value comes only from the option to invest in the future.
+
+- **At high β**, the value functions become strongly increasing in $s$, reflecting the substantial benefit of being in a high state. The curvature from $\log(1 + s)$ ensures diminishing marginal returns, preventing unbounded values.
+
+#### Effect of the Decay Rate (γ)
+
+The parameter γ controls **how quickly the state depreciates** via the transition $s' = (1 - \gamma)s + a$:
+
+- **Higher γ means faster depreciation.** When γ is larger, the state decays more rapidly toward zero without investment. This reduces the long-run value of being in any given state.
+
+- **At γ = 0**, the state is perfectly persistent—once accumulated, it never decays. This makes the value of high states very large, as rewards persist indefinitely.
+
+- **At higher γ**, investment becomes relatively more valuable because it is the only way to counteract the natural decay. The agent must invest more frequently to maintain a desirable state level.
+
+- **The value functions compress** as γ increases: the difference between high and low states diminishes because high states quickly depreciate back toward lower levels.
+
+#### Economic Intuition
+
+Together, these comparative statics illustrate a fundamental trade-off in dynamic optimization:
+
+1. **β determines the stakes**: Higher β makes the state more valuable, increasing both the reward from being in a good state and the incentive to invest.
+
+2. **γ determines persistence**: Higher γ erodes the benefits of past investments, making the problem more "short-run" in character and requiring ongoing investment to maintain value.
+
+The interaction between these parameters shapes the optimal policy: when β is high and γ is low, the agent enjoys large, persistent rewards from accumulating state. When β is low or γ is high, the benefits of investment are either small or short-lived, leading to less aggressive investment behavior.
