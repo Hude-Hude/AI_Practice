@@ -62,18 +62,6 @@ v(s, a) = \beta \log(1 + s) - a + \delta \bar{V}\bigl((1 - \gamma) s + a\bigr)
 $$
 where $\bar{V}(s) = \mathbb{E}_\varepsilon[V(s, \varepsilon)]$ is the **integrated (ex-ante) value function**.
 
-### Optimal Policy
-
-The optimal decision rule is:
-$$
-a^*(s, \varepsilon_0, \varepsilon_1) = \arg\max_{a \in \{0,1\}} \left\{ v(s, a) + \varepsilon_a \right\} = \mathbf{1}\left\{ v(s, 1) + \varepsilon_1 > v(s, 0) + \varepsilon_0 \right\}
-$$
-
-The agent chooses $a = 1$ if and only if:
-$$
-v(s, 1) - v(s, 0) > \varepsilon_0 - \varepsilon_1
-$$
-
 ### Integrated Value Function
 
 The **integrated value function** is the expected value before observing shocks:
@@ -87,24 +75,25 @@ $$
 $$
 where $\gamma_E \approx 0.5772$ is Euler's constant. Since $\gamma_E$ is a constant, it does not affect the policy and is often omitted.
 
-### Choice Probabilities
+### Optimal Policy and Choice Probabilities
+
+The optimal decision rule is:
+$$
+a^*(s, \varepsilon_0, \varepsilon_1) = \mathbf{1}\left\{ v(s, 1) + \varepsilon_1 > v(s, 0) + \varepsilon_0 \right\}
+$$
 
 The probability of choosing action $a = 1$ given state $s$ follows the **logit formula**:
 $$
-P(a = 1 | s) = P(\varepsilon_0 - \varepsilon_1 < v(s, 1) - v(s, 0)) = \frac{\exp(v(s, 1))}{\exp(v(s, 0)) + \exp(v(s, 1))}
+P(a = 1 | s) = \frac{\exp(v(s, 1))}{\exp(v(s, 0)) + \exp(v(s, 1))} = \frac{1}{1 + \exp(v(s, 0) - v(s, 1))}
 $$
-
-Equivalently:
-$$
-P(a = 1 | s) = \frac{1}{1 + \exp(v(s, 0) - v(s, 1))} = \Lambda(v(s, 1) - v(s, 0))
-$$
-where $\Lambda(x) = \frac{1}{1 + e^{-x}}$ is the logistic function.
 
 The optimal policy is a **stochastic Markov policy**: the choice probability depends only on the current state $s$ through the value difference $v(s, 1) - v(s, 0)$.
 
-## Solution Method: Value Function Iteration
+## Solution Method: Neural Network Value Iteration
 
-The integrated value function $\bar{V}(s)$ satisfies the **contraction mapping**:
+### Bellman Fixed Point
+
+The integrated value function $\bar{V}(s)$ satisfies the **fixed point equation**:
 $$
 \bar{V}(s) = \log\left( \exp(v(s, 0)) + \exp(v(s, 1)) \right)
 $$
@@ -113,17 +102,114 @@ $$
 v(s, a) = \beta \log(1 + s) - a + \delta \bar{V}((1 - \gamma)s + a)
 $$
 
+By Blackwell's sufficient conditions, this defines a contraction mapping with modulus $\delta < 1$, guaranteeing a unique fixed point $\bar{V}^*$.
+
+### Monotonic Neural Network Architecture
+
+We approximate each action's choice-specific value function $v(s, a)$ using a **monotonic neural network**. Since higher states yield higher rewards ($\beta > 0$), we expect $v(s, a)$ to be increasing in $s$. Enforcing monotonicity as an architectural constraint improves extrapolation and ensures economically sensible behavior.
+
+A feed-forward neural network is **monotonically increasing** in its input if:
+
+1. All weights are **non-negative**
+2. All activation functions are **monotonically increasing**
+
+For a network with $L$ hidden layers:
+$$
+v_\theta(s) = W_L \cdot \sigma\left( W_{L-1} \cdot \sigma\left( \cdots \sigma(W_1 \cdot s + b_1) \cdots \right) + b_{L-1} \right) + b_L
+$$
+where $W_\ell \geq 0$ for all layers and $\sigma$ is a monotonically increasing activation function.
+
+### Softplus Activation
+
+We use the **softplus** activation function:
+$$
+\sigma(x) = \log(1 + e^x)
+$$
+
+Properties:
+
+- **Monotonically increasing**: $\sigma'(x) = \frac{e^x}{1 + e^x} = \text{sigmoid}(x) > 0$
+- **Smooth approximation to ReLU**: $\sigma(x) \approx \max(0, x)$ for large $|x|$
+- **Differentiable everywhere** (unlike ReLU)
+
+### Weight Parameterization
+
+To enforce non-negative weights during optimization, we parameterize the weights using softplus of unconstrained parameters:
+$$
+W = \text{softplus}(\tilde{W}) = \log(1 + e^{\tilde{W}})
+$$
+where $\tilde{W} \in \mathbb{R}$ is the learnable parameter. This ensures $W > 0$ while allowing standard gradient-based optimization.
+
+### Value Function Approximator
+
+We use **separate monotonic networks** for each action:
+
+- $v_{\theta_0}(s)$: Monotonic network for action $a = 0$
+- $v_{\theta_1}(s)$: Monotonic network for action $a = 1$
+
+The integrated value function is computed as:
+$$
+\bar{V}_\theta(s) = \log\left( \exp(v_{\theta_0}(s)) + \exp(v_{\theta_1}(s)) \right)
+$$
+
+Choice probabilities follow the logit formula:
+$$
+P_\theta(a = 1 | s) = \frac{1}{1 + \exp(v_{\theta_0}(s) - v_{\theta_1}(s))}
+$$
+
+### Training Objective
+
+The networks are trained to satisfy the Bellman equation by minimizing the **Bellman residual**:
+$$
+\mathcal{L}(\theta) = \mathbb{E}_s\left[ \sum_{a \in \{0,1\}} \left( v_{\theta_a}(s) - u(s, a) - \delta \bar{V}_\theta(s'_a) \right)^2 \right]
+$$
+where $s'_a = (1 - \gamma)s + a$ is the next state under action $a$.
+
 ### Algorithm
 
-1. **Initialize**: $\bar{V}^{(0)}(s) = 0$ for all $s$
-2. **Iterate**: For $k = 0, 1, 2, \ldots$
-   - Compute $v^{(k)}(s, a) = u(s, a) + \delta \bar{V}^{(k)}(s')$
-   - Update $\bar{V}^{(k+1)}(s) = \log\left( \exp(v^{(k)}(s, 0)) + \exp(v^{(k)}(s, 1)) \right)$
-3. **Stop** when $\max_s |\bar{V}^{(k+1)}(s) - \bar{V}^{(k)}(s)| < \text{tolerance}$
+**Input:**
+
+- Model parameters: $\beta$, $\gamma$, $\delta$
+- State bounds: $[s_{\min}, s_{\max}]$
+- Network architecture: hidden layer sizes
+- Training parameters: learning rate $\alpha$, batch size $N$, tolerance $\epsilon$, max iterations $K$
+
+**Procedure:**
+
+1. **Initialize** neural networks $v_{\theta_0}$, $v_{\theta_1}$ with random weights
+
+2. **For** $k = 1, 2, \ldots, K$:
+
+   a. **Sample** batch of states: $\{s_i\}_{i=1}^N \sim \text{Uniform}[s_{\min}, s_{\max}]$
+   
+   b. **Compute next states** for each action:
+   $$s'_{i,a} = (1 - \gamma) s_i + a, \quad a \in \{0, 1\}$$
+   
+   c. **Compute target values** (with frozen network weights):
+   $$\hat{v}_{i,a} = u(s_i, a) + \delta \bar{V}_{\theta^{(k-1)}}(s'_{i,a})$$
+   
+   d. **Compute Bellman residual loss**:
+   $$\mathcal{L}^{(k)} = \frac{1}{N} \sum_{i=1}^N \sum_{a \in \{0,1\}} \left( v_{\theta_a}(s_i) - \hat{v}_{i,a} \right)^2$$
+   
+   e. **Update weights** via gradient descent:
+   $$\theta^{(k)} \leftarrow \theta^{(k-1)} - \alpha \nabla_\theta \mathcal{L}^{(k)}$$
+   
+   f. **Check convergence**: If $\sqrt{\mathcal{L}^{(k)}} < \epsilon$, stop
+
+3. **Return** trained networks $v_{\theta_0}$, $v_{\theta_1}$
+
+**Output:**
+
+- Choice-specific value functions: $v(s, 0) = v_{\theta_0}(s)$, $v(s, 1) = v_{\theta_1}(s)$
+- Integrated value function: $\bar{V}(s) = \log(\exp(v_{\theta_0}(s)) + \exp(v_{\theta_1}(s)))$
+- Choice probabilities: $P(a=1|s) = \sigma(v_{\theta_1}(s) - v_{\theta_0}(s))$
 
 ### Convergence
 
-By Blackwell's sufficient conditions, the Bellman operator is a contraction with modulus $\delta < 1$. Therefore:
+The algorithm minimizes the Bellman residual, driving the neural network approximation toward the true fixed point. Convergence is monitored via the root mean squared Bellman error $\sqrt{\mathcal{L}^{(k)}}$.
 
-- The sequence $\{\bar{V}^{(k)}\}$ converges to the unique fixed point $\bar{V}^*$
-- Convergence is geometric: $\|\bar{V}^{(k)} - \bar{V}^*\| \leq \delta^k \|\bar{V}^{(0)} - \bar{V}^*\|$
+Key properties:
+
+- **Continuous approximation**: No grid discretization or interpolation required
+- **Scalability**: Extends naturally to high-dimensional state spaces
+- **Economic structure**: Monotonicity enforced architecturally via non-negative weights

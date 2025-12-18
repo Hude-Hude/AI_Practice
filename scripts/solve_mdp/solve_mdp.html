@@ -84,12 +84,17 @@ window.Quarto = {
   <ul class="collapse">
   <li><a href="#bellman-equation-with-extreme-value-shocks" id="toc-bellman-equation-with-extreme-value-shocks" class="nav-link" data-scroll-target="#bellman-equation-with-extreme-value-shocks">Bellman Equation with Extreme Value Shocks</a></li>
   <li><a href="#choice-specific-value-functions" id="toc-choice-specific-value-functions" class="nav-link" data-scroll-target="#choice-specific-value-functions">Choice-Specific Value Functions</a></li>
-  <li><a href="#optimal-policy" id="toc-optimal-policy" class="nav-link" data-scroll-target="#optimal-policy">Optimal Policy</a></li>
   <li><a href="#integrated-value-function" id="toc-integrated-value-function" class="nav-link" data-scroll-target="#integrated-value-function">Integrated Value Function</a></li>
-  <li><a href="#choice-probabilities" id="toc-choice-probabilities" class="nav-link" data-scroll-target="#choice-probabilities">Choice Probabilities</a></li>
+  <li><a href="#optimal-policy-and-choice-probabilities" id="toc-optimal-policy-and-choice-probabilities" class="nav-link" data-scroll-target="#optimal-policy-and-choice-probabilities">Optimal Policy and Choice Probabilities</a></li>
   </ul></li>
-  <li><a href="#solution-method-value-function-iteration" id="toc-solution-method-value-function-iteration" class="nav-link" data-scroll-target="#solution-method-value-function-iteration">Solution Method: Value Function Iteration</a>
+  <li><a href="#solution-method-neural-network-value-iteration" id="toc-solution-method-neural-network-value-iteration" class="nav-link" data-scroll-target="#solution-method-neural-network-value-iteration">Solution Method: Neural Network Value Iteration</a>
   <ul class="collapse">
+  <li><a href="#bellman-fixed-point" id="toc-bellman-fixed-point" class="nav-link" data-scroll-target="#bellman-fixed-point">Bellman Fixed Point</a></li>
+  <li><a href="#monotonic-neural-network-architecture" id="toc-monotonic-neural-network-architecture" class="nav-link" data-scroll-target="#monotonic-neural-network-architecture">Monotonic Neural Network Architecture</a></li>
+  <li><a href="#softplus-activation" id="toc-softplus-activation" class="nav-link" data-scroll-target="#softplus-activation">Softplus Activation</a></li>
+  <li><a href="#weight-parameterization" id="toc-weight-parameterization" class="nav-link" data-scroll-target="#weight-parameterization">Weight Parameterization</a></li>
+  <li><a href="#value-function-approximator" id="toc-value-function-approximator" class="nav-link" data-scroll-target="#value-function-approximator">Value Function Approximator</a></li>
+  <li><a href="#training-objective" id="toc-training-objective" class="nav-link" data-scroll-target="#training-objective">Training Objective</a></li>
   <li><a href="#algorithm" id="toc-algorithm" class="nav-link" data-scroll-target="#algorithm">Algorithm</a></li>
   <li><a href="#convergence" id="toc-convergence" class="nav-link" data-scroll-target="#convergence">Convergence</a></li>
   </ul></li>
@@ -167,15 +172,6 @@ v(s, a) = u(s, a) + \delta \mathbb{E}_{\varepsilon'} \left[ V(s', \varepsilon') 
 v(s, a) = \beta \log(1 + s) - a + \delta \bar{V}\bigl((1 - \gamma) s + a\bigr)
 \]</span> where <span class="math inline">\(\bar{V}(s) = \mathbb{E}_\varepsilon[V(s, \varepsilon)]\)</span> is the <strong>integrated (ex-ante) value function</strong>.</p>
 </section>
-<section id="optimal-policy" class="level3">
-<h3 class="anchored" data-anchor-id="optimal-policy">Optimal Policy</h3>
-<p>The optimal decision rule is: <span class="math display">\[
-a^*(s, \varepsilon_0, \varepsilon_1) = \arg\max_{a \in \{0,1\}} \left\{ v(s, a) + \varepsilon_a \right\} = \mathbf{1}\left\{ v(s, 1) + \varepsilon_1 &gt; v(s, 0) + \varepsilon_0 \right\}
-\]</span></p>
-<p>The agent chooses <span class="math inline">\(a = 1\)</span> if and only if: <span class="math display">\[
-v(s, 1) - v(s, 0) &gt; \varepsilon_0 - \varepsilon_1
-\]</span></p>
-</section>
 <section id="integrated-value-function" class="level3">
 <h3 class="anchored" data-anchor-id="integrated-value-function">Integrated Value Function</h3>
 <p>The <strong>integrated value function</strong> is the expected value before observing shocks: <span class="math display">\[
@@ -185,42 +181,116 @@ v(s, 1) - v(s, 0) &gt; \varepsilon_0 - \varepsilon_1
 \bar{V}(s) = \log\left( \exp(v(s, 0)) + \exp(v(s, 1)) \right) + \gamma_E
 \]</span> where <span class="math inline">\(\gamma_E \approx 0.5772\)</span> is Euler’s constant. Since <span class="math inline">\(\gamma_E\)</span> is a constant, it does not affect the policy and is often omitted.</p>
 </section>
-<section id="choice-probabilities" class="level3">
-<h3 class="anchored" data-anchor-id="choice-probabilities">Choice Probabilities</h3>
-<p>The probability of choosing action <span class="math inline">\(a = 1\)</span> given state <span class="math inline">\(s\)</span> follows the <strong>logit formula</strong>: <span class="math display">\[
-P(a = 1 | s) = P(\varepsilon_0 - \varepsilon_1 &lt; v(s, 1) - v(s, 0)) = \frac{\exp(v(s, 1))}{\exp(v(s, 0)) + \exp(v(s, 1))}
+<section id="optimal-policy-and-choice-probabilities" class="level3">
+<h3 class="anchored" data-anchor-id="optimal-policy-and-choice-probabilities">Optimal Policy and Choice Probabilities</h3>
+<p>The optimal decision rule is: <span class="math display">\[
+a^*(s, \varepsilon_0, \varepsilon_1) = \mathbf{1}\left\{ v(s, 1) + \varepsilon_1 &gt; v(s, 0) + \varepsilon_0 \right\}
 \]</span></p>
-<p>Equivalently: <span class="math display">\[
-P(a = 1 | s) = \frac{1}{1 + \exp(v(s, 0) - v(s, 1))} = \Lambda(v(s, 1) - v(s, 0))
-\]</span> where <span class="math inline">\(\Lambda(x) = \frac{1}{1 + e^{-x}}\)</span> is the logistic function.</p>
+<p>The probability of choosing action <span class="math inline">\(a = 1\)</span> given state <span class="math inline">\(s\)</span> follows the <strong>logit formula</strong>: <span class="math display">\[
+P(a = 1 | s) = \frac{\exp(v(s, 1))}{\exp(v(s, 0)) + \exp(v(s, 1))} = \frac{1}{1 + \exp(v(s, 0) - v(s, 1))}
+\]</span></p>
 <p>The optimal policy is a <strong>stochastic Markov policy</strong>: the choice probability depends only on the current state <span class="math inline">\(s\)</span> through the value difference <span class="math inline">\(v(s, 1) - v(s, 0)\)</span>.</p>
 </section>
 </section>
-<section id="solution-method-value-function-iteration" class="level2">
-<h2 class="anchored" data-anchor-id="solution-method-value-function-iteration">Solution Method: Value Function Iteration</h2>
-<p>The integrated value function <span class="math inline">\(\bar{V}(s)\)</span> satisfies the <strong>contraction mapping</strong>: <span class="math display">\[
+<section id="solution-method-neural-network-value-iteration" class="level2">
+<h2 class="anchored" data-anchor-id="solution-method-neural-network-value-iteration">Solution Method: Neural Network Value Iteration</h2>
+<section id="bellman-fixed-point" class="level3">
+<h3 class="anchored" data-anchor-id="bellman-fixed-point">Bellman Fixed Point</h3>
+<p>The integrated value function <span class="math inline">\(\bar{V}(s)\)</span> satisfies the <strong>fixed point equation</strong>: <span class="math display">\[
 \bar{V}(s) = \log\left( \exp(v(s, 0)) + \exp(v(s, 1)) \right)
 \]</span> where each choice-specific value depends on <span class="math inline">\(\bar{V}\)</span>: <span class="math display">\[
 v(s, a) = \beta \log(1 + s) - a + \delta \bar{V}((1 - \gamma)s + a)
 \]</span></p>
+<p>By Blackwell’s sufficient conditions, this defines a contraction mapping with modulus <span class="math inline">\(\delta &lt; 1\)</span>, guaranteeing a unique fixed point <span class="math inline">\(\bar{V}^*\)</span>.</p>
+</section>
+<section id="monotonic-neural-network-architecture" class="level3">
+<h3 class="anchored" data-anchor-id="monotonic-neural-network-architecture">Monotonic Neural Network Architecture</h3>
+<p>We approximate each action’s choice-specific value function <span class="math inline">\(v(s, a)\)</span> using a <strong>monotonic neural network</strong>. Since higher states yield higher rewards (<span class="math inline">\(\beta &gt; 0\)</span>), we expect <span class="math inline">\(v(s, a)\)</span> to be increasing in <span class="math inline">\(s\)</span>. Enforcing monotonicity as an architectural constraint improves extrapolation and ensures economically sensible behavior.</p>
+<p>A feed-forward neural network is <strong>monotonically increasing</strong> in its input if:</p>
+<ol type="1">
+<li>All weights are <strong>non-negative</strong></li>
+<li>All activation functions are <strong>monotonically increasing</strong></li>
+</ol>
+<p>For a network with <span class="math inline">\(L\)</span> hidden layers: <span class="math display">\[
+v_\theta(s) = W_L \cdot \sigma\left( W_{L-1} \cdot \sigma\left( \cdots \sigma(W_1 \cdot s + b_1) \cdots \right) + b_{L-1} \right) + b_L
+\]</span> where <span class="math inline">\(W_\ell \geq 0\)</span> for all layers and <span class="math inline">\(\sigma\)</span> is a monotonically increasing activation function.</p>
+</section>
+<section id="softplus-activation" class="level3">
+<h3 class="anchored" data-anchor-id="softplus-activation">Softplus Activation</h3>
+<p>We use the <strong>softplus</strong> activation function: <span class="math display">\[
+\sigma(x) = \log(1 + e^x)
+\]</span></p>
+<p>Properties:</p>
+<ul>
+<li><strong>Monotonically increasing</strong>: <span class="math inline">\(\sigma'(x) = \frac{e^x}{1 + e^x} = \text{sigmoid}(x) &gt; 0\)</span></li>
+<li><strong>Smooth approximation to ReLU</strong>: <span class="math inline">\(\sigma(x) \approx \max(0, x)\)</span> for large <span class="math inline">\(|x|\)</span></li>
+<li><strong>Differentiable everywhere</strong> (unlike ReLU)</li>
+</ul>
+</section>
+<section id="weight-parameterization" class="level3">
+<h3 class="anchored" data-anchor-id="weight-parameterization">Weight Parameterization</h3>
+<p>To enforce non-negative weights during optimization, we parameterize the weights using softplus of unconstrained parameters: <span class="math display">\[
+W = \text{softplus}(\tilde{W}) = \log(1 + e^{\tilde{W}})
+\]</span> where <span class="math inline">\(\tilde{W} \in \mathbb{R}\)</span> is the learnable parameter. This ensures <span class="math inline">\(W &gt; 0\)</span> while allowing standard gradient-based optimization.</p>
+</section>
+<section id="value-function-approximator" class="level3">
+<h3 class="anchored" data-anchor-id="value-function-approximator">Value Function Approximator</h3>
+<p>We use <strong>separate monotonic networks</strong> for each action:</p>
+<ul>
+<li><span class="math inline">\(v_{\theta_0}(s)\)</span>: Monotonic network for action <span class="math inline">\(a = 0\)</span></li>
+<li><span class="math inline">\(v_{\theta_1}(s)\)</span>: Monotonic network for action <span class="math inline">\(a = 1\)</span></li>
+</ul>
+<p>The integrated value function is computed as: <span class="math display">\[
+\bar{V}_\theta(s) = \log\left( \exp(v_{\theta_0}(s)) + \exp(v_{\theta_1}(s)) \right)
+\]</span></p>
+<p>Choice probabilities follow the logit formula: <span class="math display">\[
+P_\theta(a = 1 | s) = \frac{1}{1 + \exp(v_{\theta_0}(s) - v_{\theta_1}(s))}
+\]</span></p>
+</section>
+<section id="training-objective" class="level3">
+<h3 class="anchored" data-anchor-id="training-objective">Training Objective</h3>
+<p>The networks are trained to satisfy the Bellman equation by minimizing the <strong>Bellman residual</strong>: <span class="math display">\[
+\mathcal{L}(\theta) = \mathbb{E}_s\left[ \sum_{a \in \{0,1\}} \left( v_{\theta_a}(s) - u(s, a) - \delta \bar{V}_\theta(s'_a) \right)^2 \right]
+\]</span> where <span class="math inline">\(s'_a = (1 - \gamma)s + a\)</span> is the next state under action <span class="math inline">\(a\)</span>.</p>
+</section>
 <section id="algorithm" class="level3">
 <h3 class="anchored" data-anchor-id="algorithm">Algorithm</h3>
-<ol type="1">
-<li><strong>Initialize</strong>: <span class="math inline">\(\bar{V}^{(0)}(s) = 0\)</span> for all <span class="math inline">\(s\)</span></li>
-<li><strong>Iterate</strong>: For <span class="math inline">\(k = 0, 1, 2, \ldots\)</span>
+<p><strong>Input:</strong></p>
 <ul>
-<li>Compute <span class="math inline">\(v^{(k)}(s, a) = u(s, a) + \delta \bar{V}^{(k)}(s')\)</span></li>
-<li>Update <span class="math inline">\(\bar{V}^{(k+1)}(s) = \log\left( \exp(v^{(k)}(s, 0)) + \exp(v^{(k)}(s, 1)) \right)\)</span></li>
-</ul></li>
-<li><strong>Stop</strong> when <span class="math inline">\(\max_s |\bar{V}^{(k+1)}(s) - \bar{V}^{(k)}(s)| &lt; \text{tolerance}\)</span></li>
+<li>Model parameters: <span class="math inline">\(\beta\)</span>, <span class="math inline">\(\gamma\)</span>, <span class="math inline">\(\delta\)</span></li>
+<li>State bounds: <span class="math inline">\([s_{\min}, s_{\max}]\)</span></li>
+<li>Network architecture: hidden layer sizes</li>
+<li>Training parameters: learning rate <span class="math inline">\(\alpha\)</span>, batch size <span class="math inline">\(N\)</span>, tolerance <span class="math inline">\(\epsilon\)</span>, max iterations <span class="math inline">\(K\)</span></li>
+</ul>
+<p><strong>Procedure:</strong></p>
+<ol type="1">
+<li><p><strong>Initialize</strong> neural networks <span class="math inline">\(v_{\theta_0}\)</span>, <span class="math inline">\(v_{\theta_1}\)</span> with random weights</p></li>
+<li><p><strong>For</strong> <span class="math inline">\(k = 1, 2, \ldots, K\)</span>:</p>
+<ol type="a">
+<li><p><strong>Sample</strong> batch of states: <span class="math inline">\(\{s_i\}_{i=1}^N \sim \text{Uniform}[s_{\min}, s_{\max}]\)</span></p></li>
+<li><p><strong>Compute next states</strong> for each action: <span class="math display">\[s'_{i,a} = (1 - \gamma) s_i + a, \quad a \in \{0, 1\}\]</span></p></li>
+<li><p><strong>Compute target values</strong> (with frozen network weights): <span class="math display">\[\hat{v}_{i,a} = u(s_i, a) + \delta \bar{V}_{\theta^{(k-1)}}(s'_{i,a})\]</span></p></li>
+<li><p><strong>Compute Bellman residual loss</strong>: <span class="math display">\[\mathcal{L}^{(k)} = \frac{1}{N} \sum_{i=1}^N \sum_{a \in \{0,1\}} \left( v_{\theta_a}(s_i) - \hat{v}_{i,a} \right)^2\]</span></p></li>
+<li><p><strong>Update weights</strong> via gradient descent: <span class="math display">\[\theta^{(k)} \leftarrow \theta^{(k-1)} - \alpha \nabla_\theta \mathcal{L}^{(k)}\]</span></p></li>
+<li><p><strong>Check convergence</strong>: If <span class="math inline">\(\sqrt{\mathcal{L}^{(k)}} &lt; \epsilon\)</span>, stop</p></li>
+</ol></li>
+<li><p><strong>Return</strong> trained networks <span class="math inline">\(v_{\theta_0}\)</span>, <span class="math inline">\(v_{\theta_1}\)</span></p></li>
 </ol>
+<p><strong>Output:</strong></p>
+<ul>
+<li>Choice-specific value functions: <span class="math inline">\(v(s, 0) = v_{\theta_0}(s)\)</span>, <span class="math inline">\(v(s, 1) = v_{\theta_1}(s)\)</span></li>
+<li>Integrated value function: <span class="math inline">\(\bar{V}(s) = \log(\exp(v_{\theta_0}(s)) + \exp(v_{\theta_1}(s)))\)</span></li>
+<li>Choice probabilities: <span class="math inline">\(P(a=1|s) = \sigma(v_{\theta_1}(s) - v_{\theta_0}(s))\)</span></li>
+</ul>
 </section>
 <section id="convergence" class="level3">
 <h3 class="anchored" data-anchor-id="convergence">Convergence</h3>
-<p>By Blackwell’s sufficient conditions, the Bellman operator is a contraction with modulus <span class="math inline">\(\delta &lt; 1\)</span>. Therefore:</p>
+<p>The algorithm minimizes the Bellman residual, driving the neural network approximation toward the true fixed point. Convergence is monitored via the root mean squared Bellman error <span class="math inline">\(\sqrt{\mathcal{L}^{(k)}}\)</span>.</p>
+<p>Key properties:</p>
 <ul>
-<li>The sequence <span class="math inline">\(\{\bar{V}^{(k)}\}\)</span> converges to the unique fixed point <span class="math inline">\(\bar{V}^*\)</span></li>
-<li>Convergence is geometric: <span class="math inline">\(\|\bar{V}^{(k)} - \bar{V}^*\| \leq \delta^k \|\bar{V}^{(0)} - \bar{V}^*\|\)</span></li>
+<li><strong>Continuous approximation</strong>: No grid discretization or interpolation required</li>
+<li><strong>Scalability</strong>: Extends naturally to high-dimensional state spaces</li>
+<li><strong>Economic structure</strong>: Monotonicity enforced architecturally via non-negative weights</li>
 </ul>
 </section>
 </section>
