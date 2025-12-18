@@ -1,10 +1,9 @@
-"""Pytest configuration."""
+"""Pytest configuration for mdp_solver tests."""
 
 import sys
 from pathlib import Path
 
-# Ensure the src directory is in the path for imports
+# Add src directory to path for imports
 src_path = Path(__file__).parent.parent / "src"
-if str(src_path) not in sys.path:
-    sys.path.insert(0, str(src_path))
+sys.path.insert(0, str(src_path))
 
