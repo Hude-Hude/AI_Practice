@@ -1,8 +1,8 @@
-"""Tests for model module."""
+"""Tests for model primitives."""
 
 import torch
 
-from mdp_solver.model import clamp_states, compute_next_state, compute_reward
+from mdp_solver import clamp_states, compute_next_state, compute_reward
 
 
 class TestComputeReward:
@@ -121,4 +121,3 @@ class TestClampStates:
         s_clamped = clamp_states(s, s_min=0.0, s_max=10.0)
         expected = torch.tensor([0.0, 5.0, 10.0])
         torch.testing.assert_close(s_clamped, expected)
-

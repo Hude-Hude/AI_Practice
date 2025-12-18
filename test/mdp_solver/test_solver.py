@@ -2,8 +2,9 @@
 
 import torch
 
-from mdp_solver.solver import (
+from mdp_solver import (
     check_convergence,
+    evaluate_network,
     initialize_networks,
     sample_states,
     solve_value_function,
@@ -167,7 +168,6 @@ class TestSolveValueFunction:
         )
         
         # Check monotonicity
-        from mdp_solver.network import evaluate_network
         s = torch.linspace(0, 10, 100)
         
         v0 = evaluate_network(v0_net, s)
@@ -175,4 +175,3 @@ class TestSolveValueFunction:
         
         assert torch.all(torch.diff(v0) >= -1e-5)
         assert torch.all(torch.diff(v1) >= -1e-5)
-

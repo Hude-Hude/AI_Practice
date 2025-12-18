@@ -1,9 +1,9 @@
-"""Tests for network module."""
+"""Tests for network components."""
 
 import torch
 import torch.nn.functional as F
 
-from mdp_solver.network import (
+from mdp_solver import (
     MonotonicLinear,
     SoftplusActivation,
     build_monotonic_network,
@@ -122,4 +122,3 @@ class TestEvaluateNetwork:
         
         diffs = torch.diff(values)
         assert torch.all(diffs >= -1e-5)  # Allow small numerical errors
-

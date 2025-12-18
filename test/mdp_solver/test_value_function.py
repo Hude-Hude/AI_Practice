@@ -1,13 +1,14 @@
-"""Tests for value_function module."""
+"""Tests for value function computations."""
 
 import torch
 
-from mdp_solver.network import build_monotonic_network
-from mdp_solver.value_function import (
+from mdp_solver import (
+    build_monotonic_network,
     compute_bellman_loss,
     compute_bellman_targets,
     compute_choice_probability,
     compute_integrated_value,
+    evaluate_network,
 )
 
 
@@ -29,7 +30,6 @@ class TestComputeIntegratedValue:
         v1_net = build_monotonic_network([8])
         s = torch.linspace(0, 10, 50)
         
-        from mdp_solver.network import evaluate_network
         v0 = evaluate_network(v0_net, s)
         v1 = evaluate_network(v1_net, s)
         V = compute_integrated_value(v0_net, v1_net, s)
@@ -44,7 +44,6 @@ class TestComputeIntegratedValue:
         v1_net = build_monotonic_network([8])
         s = torch.tensor([0.0, 5.0, 10.0])
         
-        from mdp_solver.network import evaluate_network
         v0 = evaluate_network(v0_net, s)
         v1 = evaluate_network(v1_net, s)
         V = compute_integrated_value(v0_net, v1_net, s)
@@ -158,11 +157,9 @@ class TestComputeChoiceProbability:
         v1_net = build_monotonic_network([8])
         s = torch.tensor([0.0, 5.0, 10.0])
         
-        from mdp_solver.network import evaluate_network
         v0 = evaluate_network(v0_net, s)
         v1 = evaluate_network(v1_net, s)
         prob = compute_choice_probability(v0_net, v1_net, s)
         
         expected = torch.sigmoid(v1 - v0)
         torch.testing.assert_close(prob, expected)
-
