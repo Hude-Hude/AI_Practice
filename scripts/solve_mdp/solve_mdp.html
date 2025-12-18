@@ -88,20 +88,11 @@ window.Quarto = {
   <li><a href="#integrated-value-function" id="toc-integrated-value-function" class="nav-link" data-scroll-target="#integrated-value-function">Integrated Value Function</a></li>
   <li><a href="#choice-probabilities" id="toc-choice-probabilities" class="nav-link" data-scroll-target="#choice-probabilities">Choice Probabilities</a></li>
   </ul></li>
-  <li><a href="#neural-network-architecture" id="toc-neural-network-architecture" class="nav-link" data-scroll-target="#neural-network-architecture">Neural Network Architecture</a>
+  <li><a href="#solution-method-value-function-iteration" id="toc-solution-method-value-function-iteration" class="nav-link" data-scroll-target="#solution-method-value-function-iteration">Solution Method: Value Function Iteration</a>
   <ul class="collapse">
-  <li><a href="#monotonic-neural-networks" id="toc-monotonic-neural-networks" class="nav-link" data-scroll-target="#monotonic-neural-networks">Monotonic Neural Networks</a></li>
-  <li><a href="#softplus-activation" id="toc-softplus-activation" class="nav-link" data-scroll-target="#softplus-activation">Softplus Activation</a></li>
-  <li><a href="#weight-parameterization" id="toc-weight-parameterization" class="nav-link" data-scroll-target="#weight-parameterization">Weight Parameterization</a></li>
-  <li><a href="#architecture-pseudo-code" id="toc-architecture-pseudo-code" class="nav-link" data-scroll-target="#architecture-pseudo-code">Architecture Pseudo Code</a></li>
+  <li><a href="#algorithm" id="toc-algorithm" class="nav-link" data-scroll-target="#algorithm">Algorithm</a></li>
+  <li><a href="#convergence" id="toc-convergence" class="nav-link" data-scroll-target="#convergence">Convergence</a></li>
   </ul></li>
-  <li><a href="#value-iteration-algorithm" id="toc-value-iteration-algorithm" class="nav-link" data-scroll-target="#value-iteration-algorithm">Value Iteration Algorithm</a>
-  <ul class="collapse">
-  <li><a href="#pseudo-code" id="toc-pseudo-code" class="nav-link" data-scroll-target="#pseudo-code">Pseudo Code</a></li>
-  <li><a href="#subroutines" id="toc-subroutines" class="nav-link" data-scroll-target="#subroutines">Subroutines</a></li>
-  <li><a href="#derived-quantities" id="toc-derived-quantities" class="nav-link" data-scroll-target="#derived-quantities">Derived Quantities</a></li>
-  </ul></li>
-  <li><a href="#summary" id="toc-summary" class="nav-link" data-scroll-target="#summary">Summary</a></li>
   </ul>
 </nav>
 </div>
@@ -131,9 +122,9 @@ window.Quarto = {
 <h2 class="anchored" data-anchor-id="model-setup">Model Setup</h2>
 <p>We consider a dynamic discrete choice model with:</p>
 <ul>
-<li><strong>State</strong>: <span class="math inline">\(s \in \mathbb{R}\)</span> (continuous, discretized on a grid)</li>
+<li><strong>State</strong>: <span class="math inline">\(s \in \mathbb{R}_{\geq 0}\)</span> (continuous, non-negative)</li>
 <li><strong>Action</strong>: <span class="math inline">\(a \in \{0, 1\}\)</span> (binary choice)</li>
-<li><strong>Mean reward</strong>: <span class="math inline">\(u(s, a) = \beta s - a\)</span></li>
+<li><strong>Mean reward</strong>: <span class="math inline">\(u(s, a) = \beta \log(1 + s) - a\)</span></li>
 <li><strong>State transition</strong>: <span class="math inline">\(s' = (1 - \gamma) s + a\)</span> (deterministic)</li>
 <li><strong>Discount factor</strong>: <span class="math inline">\(\delta\)</span></li>
 <li><strong>Shocks</strong>: <span class="math inline">\(\varepsilon_a \sim\)</span> Type-I Extreme Value (iid across actions and time)</li>
@@ -141,7 +132,13 @@ window.Quarto = {
 <section id="interpretation" class="level3">
 <h3 class="anchored" data-anchor-id="interpretation">Interpretation</h3>
 <ul>
-<li>Higher state <span class="math inline">\(s\)</span> yields higher flow payoff (coefficient <span class="math inline">\(\beta &gt; 0\)</span>)</li>
+<li>Higher state <span class="math inline">\(s\)</span> yields higher flow payoff, but with <strong>diminishing marginal returns</strong></li>
+<li>The <span class="math inline">\(\log(1 + s)\)</span> specification ensures:
+<ul>
+<li>Marginal utility <span class="math inline">\(\frac{\partial u}{\partial s} = \frac{\beta}{1 + s} &gt; 0\)</span> (increasing in <span class="math inline">\(s\)</span>)</li>
+<li>Diminishing: <span class="math inline">\(\frac{\partial^2 u}{\partial s^2} = -\frac{\beta}{(1 + s)^2} &lt; 0\)</span> (concave)</li>
+<li>Well-defined at <span class="math inline">\(s = 0\)</span>: <span class="math inline">\(u(0, a) = -a\)</span></li>
+</ul></li>
 <li>Action <span class="math inline">\(a = 1\)</span> costs 1 unit but boosts next period’s state by 1</li>
 <li>Action <span class="math inline">\(a = 0\)</span> is free but state decays toward zero at rate <span class="math inline">\(\gamma\)</span></li>
 </ul>
@@ -167,7 +164,7 @@ V(s, \varepsilon_0, \varepsilon_1) = \max_{a \in \{0,1\}} \left\{ u(s, a) + \var
 v(s, a) = u(s, a) + \delta \mathbb{E}_{\varepsilon'} \left[ V(s', \varepsilon') \right]
 \]</span></p>
 <p>Substituting the reward and transition: <span class="math display">\[
-v(s, a) = \beta s - a + \delta \bar{V}\bigl((1 - \gamma) s + a\bigr)
+v(s, a) = \beta \log(1 + s) - a + \delta \bar{V}\bigl((1 - \gamma) s + a\bigr)
 \]</span> where <span class="math inline">\(\bar{V}(s) = \mathbb{E}_\varepsilon[V(s, \varepsilon)]\)</span> is the <strong>integrated (ex-ante) value function</strong>.</p>
 </section>
 <section id="optimal-policy" class="level3">
@@ -199,198 +196,33 @@ P(a = 1 | s) = \frac{1}{1 + \exp(v(s, 0) - v(s, 1))} = \Lambda(v(s, 1) - v(s, 0)
 <p>The optimal policy is a <strong>stochastic Markov policy</strong>: the choice probability depends only on the current state <span class="math inline">\(s\)</span> through the value difference <span class="math inline">\(v(s, 1) - v(s, 0)\)</span>.</p>
 </section>
 </section>
-<section id="neural-network-architecture" class="level2">
-<h2 class="anchored" data-anchor-id="neural-network-architecture">Neural Network Architecture</h2>
-<p>We approximate each action’s choice-specific value function <span class="math inline">\(v(s, a)\)</span> using a <strong>monotonic neural network</strong>. Since higher states yield higher rewards (<span class="math inline">\(\beta &gt; 0\)</span>), we expect <span class="math inline">\(v(s, a)\)</span> to be increasing in <span class="math inline">\(s\)</span>. Enforcing monotonicity as an architectural constraint improves extrapolation and ensures economically sensible behavior.</p>
-<section id="monotonic-neural-networks" class="level3">
-<h3 class="anchored" data-anchor-id="monotonic-neural-networks">Monotonic Neural Networks</h3>
-<p>A feed-forward neural network is <strong>monotonically increasing</strong> in its input if:</p>
+<section id="solution-method-value-function-iteration" class="level2">
+<h2 class="anchored" data-anchor-id="solution-method-value-function-iteration">Solution Method: Value Function Iteration</h2>
+<p>The integrated value function <span class="math inline">\(\bar{V}(s)\)</span> satisfies the <strong>contraction mapping</strong>: <span class="math display">\[
+\bar{V}(s) = \log\left( \exp(v(s, 0)) + \exp(v(s, 1)) \right)
+\]</span> where each choice-specific value depends on <span class="math inline">\(\bar{V}\)</span>: <span class="math display">\[
+v(s, a) = \beta \log(1 + s) - a + \delta \bar{V}((1 - \gamma)s + a)
+\]</span></p>
+<section id="algorithm" class="level3">
+<h3 class="anchored" data-anchor-id="algorithm">Algorithm</h3>
 <ol type="1">
-<li>All weights are <strong>non-negative</strong></li>
-<li>All activation functions are <strong>monotonically increasing</strong></li>
-</ol>
-<p>For a single hidden layer network: <span class="math display">\[
-v_\theta(s, a) = W_2^{(a)} \cdot \sigma\left( W_1^{(a)} \cdot s + b_1^{(a)} \right) + b_2^{(a)}
-\]</span></p>
-<p>where <span class="math inline">\(W_1^{(a)} \geq 0\)</span>, <span class="math inline">\(W_2^{(a)} \geq 0\)</span>, and <span class="math inline">\(\sigma\)</span> is a monotonic activation.</p>
-</section>
-<section id="softplus-activation" class="level3">
-<h3 class="anchored" data-anchor-id="softplus-activation">Softplus Activation</h3>
-<p>We use the <strong>softplus</strong> activation function: <span class="math display">\[
-\sigma(x) = \log(1 + e^x)
-\]</span></p>
-<p>Properties:</p>
+<li><strong>Initialize</strong>: <span class="math inline">\(\bar{V}^{(0)}(s) = 0\)</span> for all <span class="math inline">\(s\)</span></li>
+<li><strong>Iterate</strong>: For <span class="math inline">\(k = 0, 1, 2, \ldots\)</span>
 <ul>
-<li>Monotonically increasing: <span class="math inline">\(\sigma'(x) = \frac{e^x}{1 + e^x} = \text{sigmoid}(x) &gt; 0\)</span></li>
-<li>Smooth approximation to ReLU: <span class="math inline">\(\sigma(x) \approx \max(0, x)\)</span> for large <span class="math inline">\(|x|\)</span></li>
-<li>Differentiable everywhere (unlike ReLU)</li>
+<li>Compute <span class="math inline">\(v^{(k)}(s, a) = u(s, a) + \delta \bar{V}^{(k)}(s')\)</span></li>
+<li>Update <span class="math inline">\(\bar{V}^{(k+1)}(s) = \log\left( \exp(v^{(k)}(s, 0)) + \exp(v^{(k)}(s, 1)) \right)\)</span></li>
+</ul></li>
+<li><strong>Stop</strong> when <span class="math inline">\(\max_s |\bar{V}^{(k+1)}(s) - \bar{V}^{(k)}(s)| &lt; \text{tolerance}\)</span></li>
+</ol>
+</section>
+<section id="convergence" class="level3">
+<h3 class="anchored" data-anchor-id="convergence">Convergence</h3>
+<p>By Blackwell’s sufficient conditions, the Bellman operator is a contraction with modulus <span class="math inline">\(\delta &lt; 1\)</span>. Therefore:</p>
+<ul>
+<li>The sequence <span class="math inline">\(\{\bar{V}^{(k)}\}\)</span> converges to the unique fixed point <span class="math inline">\(\bar{V}^*\)</span></li>
+<li>Convergence is geometric: <span class="math inline">\(\|\bar{V}^{(k)} - \bar{V}^*\| \leq \delta^k \|\bar{V}^{(0)} - \bar{V}^*\|\)</span></li>
 </ul>
 </section>
-<section id="weight-parameterization" class="level3">
-<h3 class="anchored" data-anchor-id="weight-parameterization">Weight Parameterization</h3>
-<p>To enforce non-negative weights, we parameterize the weights using softplus of unconstrained parameters: <span class="math display">\[
-W = \log(1 + e^{\tilde{W}})
-\]</span></p>
-<p>where <span class="math inline">\(\tilde{W} \in \mathbb{R}\)</span> is the learnable parameter. This ensures <span class="math inline">\(W &gt; 0\)</span> while allowing gradient-based optimization.</p>
-</section>
-<section id="architecture-pseudo-code" class="level3">
-<h3 class="anchored" data-anchor-id="architecture-pseudo-code">Architecture Pseudo Code</h3>
-<pre><code>CLASS: MonotonicLayer
-─────────────────────
-  # A linear layer with non-negative weights
-
-  ATTRIBUTES:
-    weight_raw : matrix of unconstrained parameters
-    bias : vector (unconstrained)
-
-  METHOD: FORWARD(x)
-    weight ← softplus(weight_raw)    # Ensure W &gt; 0
-    RETURN weight @ x + bias</code></pre>
-<pre><code>CLASS: MonotonicValueNetwork
-────────────────────────────
-  # Feed-forward network ensuring monotonicity in input
-
-  ATTRIBUTES:
-    layers : list of (MonotonicLayer, Softplus) pairs
-    output_layer : MonotonicLayer
-
-  CONSTRUCTOR(hidden_sizes):
-    in_size ← 1  # Single state input
-    FOR each hidden_size IN hidden_sizes:
-      ADD MonotonicLayer(in_size → hidden_size)
-      ADD Softplus activation
-      in_size ← hidden_size
-    ADD MonotonicLayer(in_size → 1)  # Output layer
-
-  METHOD: FORWARD(s)
-    x ← reshape(s, (-1, 1))
-    FOR each layer IN layers:
-      x ← layer(x)
-    RETURN squeeze(x)</code></pre>
-<pre><code>CLASS: ValueFunctionApproximator
-────────────────────────────────
-  # Approximates v(s, 0) and v(s, 1) with separate monotonic networks
-
-  ATTRIBUTES:
-    v0_net : MonotonicValueNetwork
-    v1_net : MonotonicValueNetwork
-
-  CONSTRUCTOR(hidden_sizes):
-    v0_net ← MonotonicValueNetwork(hidden_sizes)
-    v1_net ← MonotonicValueNetwork(hidden_sizes)
-
-  METHOD: FORWARD(s)
-    v0 ← v0_net(s)
-    v1 ← v1_net(s)
-    RETURN v0, v1
-
-  METHOD: COMPUTE_INTEGRATED_VALUE(s)
-    v0, v1 ← FORWARD(s)
-    RETURN logsumexp(stack(v0, v1))
-
-  METHOD: COMPUTE_CHOICE_PROBABILITY(s)
-    v0, v1 ← FORWARD(s)
-    RETURN sigmoid(v1 - v0)</code></pre>
-</section>
-</section>
-<section id="value-iteration-algorithm" class="level2">
-<h2 class="anchored" data-anchor-id="value-iteration-algorithm">Value Iteration Algorithm</h2>
-<section id="pseudo-code" class="level3">
-<h3 class="anchored" data-anchor-id="pseudo-code">Pseudo Code</h3>
-<pre><code>ALGORITHM: SolveValueFunction
-INPUT: state_grid, β, γ, δ, tolerance, max_iterations
-OUTPUT: V (integrated value function), v₀, v₁ (choice-specific values)
-
-1. V ← INITIALIZE_VALUE_FUNCTION(state_grid)
-
-2. FOR iteration = 1 TO max_iterations:
-   
-   a. v₀ ← COMPUTE_CHOICE_VALUE(V, state_grid, action=0, β, γ, δ)
-   b. v₁ ← COMPUTE_CHOICE_VALUE(V, state_grid, action=1, β, γ, δ)
-   
-   c. V_new ← COMPUTE_INTEGRATED_VALUE(v₀, v₁)
-   
-   d. IF CHECK_CONVERGENCE(V, V_new, tolerance):
-        RETURN V_new, v₀, v₁
-   
-   e. V ← V_new
-
-3. WARN("Did not converge")
-   RETURN V, v₀, v₁</code></pre>
-</section>
-<section id="subroutines" class="level3">
-<h3 class="anchored" data-anchor-id="subroutines">Subroutines</h3>
-<pre><code>SUBROUTINE: INITIALIZE_VALUE_FUNCTION(state_grid)
-────────────────────────────────────────────────
-  RETURN zeros(length(state_grid))</code></pre>
-<pre><code>SUBROUTINE: COMPUTE_CHOICE_VALUE(V, state_grid, action, β, γ, δ)
-────────────────────────────────────────────────────────────────
-  # Step 1: Compute flow reward
-  reward ← COMPUTE_REWARD(state_grid, action, β)
-  
-  # Step 2: Compute next states
-  next_states ← COMPUTE_NEXT_STATE(state_grid, action, γ)
-  
-  # Step 3: Interpolate continuation value at next states
-  continuation ← INTERPOLATE_VALUE(V, state_grid, next_states)
-  
-  # Step 4: Combine flow reward and discounted continuation
-  RETURN reward + δ * continuation</code></pre>
-<pre><code>SUBROUTINE: COMPUTE_REWARD(s, action, β)
-────────────────────────────────────────
-  RETURN β * s - action</code></pre>
-<pre><code>SUBROUTINE: COMPUTE_NEXT_STATE(s, action, γ)
-────────────────────────────────────────────
-  RETURN (1 - γ) * s + action</code></pre>
-<pre><code>SUBROUTINE: INTERPOLATE_VALUE(V, state_grid, query_states)
-──────────────────────────────────────────────────────────
-  # Linear interpolation with boundary extrapolation
-  RETURN linear_interpolate(
-    x=state_grid,
-    y=V,
-    query=query_states,
-    extrapolate=boundary_values
-  )</code></pre>
-<pre><code>SUBROUTINE: COMPUTE_INTEGRATED_VALUE(v₀, v₁)
-────────────────────────────────────────────
-  # Log-sum-exp formula (Emax with Type-I EV shocks)
-  RETURN log(exp(v₀) + exp(v₁))</code></pre>
-<pre><code>SUBROUTINE: CHECK_CONVERGENCE(V_old, V_new, tolerance)
-──────────────────────────────────────────────────────
-  diff ← max(|V_new - V_old|)
-  RETURN diff &lt; tolerance</code></pre>
-</section>
-<section id="derived-quantities" class="level3">
-<h3 class="anchored" data-anchor-id="derived-quantities">Derived Quantities</h3>
-<pre><code>SUBROUTINE: COMPUTE_CHOICE_PROBABILITY(v₀, v₁)
-──────────────────────────────────────────────
-  # Logit formula: P(a=1|s)
-  RETURN exp(v₁) / (exp(v₀) + exp(v₁))
-  
-  # Equivalently: sigmoid(v₁ - v₀)</code></pre>
-</section>
-</section>
-<section id="summary" class="level2">
-<h2 class="anchored" data-anchor-id="summary">Summary</h2>
-<p>This document describes a dynamic discrete choice problem with:</p>
-<ul>
-<li><strong>State dynamics</strong>: <span class="math inline">\(s' = (1 - \gamma) s + a\)</span> — state decays naturally, action 1 boosts it</li>
-<li><strong>Trade-off</strong>: Action 1 costs 1 today but increases future state (and hence future rewards)</li>
-<li><strong>Type-I EV shocks</strong>: Provide smooth choice probabilities via logit formula</li>
-</ul>
-<p>The solution method:</p>
-<ol type="1">
-<li><strong>Discretize</strong> the continuous state space</li>
-<li><strong>Interpolate</strong> to handle off-grid continuation values</li>
-<li><strong>Iterate</strong> on the Bellman equation using log-sum-exp</li>
-<li><strong>Recover</strong> choice probabilities from the logit formula</li>
-</ol>
-<p>The neural network approximation:</p>
-<ol type="1">
-<li>Use <strong>monotonic networks</strong> (non-negative weights + softplus activation)</li>
-<li>Separate networks for each action’s value function</li>
-<li>Enforce economic structure (monotonicity) as architectural constraint</li>
-</ol>
 </section>
 
 </main>
