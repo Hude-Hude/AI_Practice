@@ -208,7 +208,7 @@ PROCEDURE:
     v₁_pred : Vector[N] ← EVALUATE_NETWORK(v₁_net, s_batch)
     
     target₀ : Vector[N], target₁ : Vector[N] ← COMPUTE_BELLMAN_TARGETS(
-      v₀_net, v₁_net, s_batch, β, γ, δ, s_min, s_max
+      v₀_net, v₁_net, s_batch, β, γ, δ
     )
     
     loss : Scalar ← COMPUTE_BELLMAN_LOSS(v₀_pred, v₁_pred, target₀, target₁)
@@ -368,26 +368,6 @@ OUTPUT:
 ```
 
 ```
-SUBROUTINE: CLAMP_STATES
-────────────────────────
-INPUT:
-  s     : Vector[N]                  # States
-  s_min : Scalar                     # Minimum bound
-  s_max : Scalar                     # Maximum bound
-OUTPUT:
-  s_clamped : Vector[N]              # Clamped states
-
-  FOR i : Int = 0 TO N - 1:
-    IF s[i] < s_min:
-      s_clamped[i] : Scalar ← s_min
-    ELSE IF s[i] > s_max:
-      s_clamped[i] : Scalar ← s_max
-    ELSE:
-      s_clamped[i] : Scalar ← s[i]
-  RETURN s_clamped
-```
-
-```
 SUBROUTINE: COMPUTE_INTEGRATED_VALUE
 ────────────────────────────────────
 INPUT:
@@ -416,25 +396,21 @@ INPUT:
   β      : Scalar                    # Reward coefficient
   γ      : Scalar                    # Decay rate
   δ      : Scalar                    # Discount factor
-  s_min  : Scalar                    # Minimum state bound
-  s_max  : Scalar                    # Maximum state bound
 OUTPUT:
   target₀ : Vector[N]                # Target for action 0
   target₁ : Vector[N]                # Target for action 1
 
-  # Compute targets for action 0
+  # Compute targets for action 0 (no clamping - unbounded state space)
   r₀ : Vector[N] ← COMPUTE_REWARD(s, action=0, β)
   s_next₀ : Vector[N] ← COMPUTE_NEXT_STATE(s, action=0, γ)
-  s_next₀ ← CLAMP_STATES(s_next₀, s_min, s_max)
   V_next₀ : Vector[N] ← COMPUTE_INTEGRATED_VALUE(v₀_net, v₁_net, s_next₀)
   
   FOR i : Int = 0 TO N - 1:
     target₀[i] : Scalar ← r₀[i] + δ * V_next₀[i]
   
-  # Compute targets for action 1
+  # Compute targets for action 1 (no clamping - unbounded state space)
   r₁ : Vector[N] ← COMPUTE_REWARD(s, action=1, β)
   s_next₁ : Vector[N] ← COMPUTE_NEXT_STATE(s, action=1, γ)
-  s_next₁ ← CLAMP_STATES(s_next₁, s_min, s_max)
   V_next₁ : Vector[N] ← COMPUTE_INTEGRATED_VALUE(v₀_net, v₁_net, s_next₁)
   
   FOR i : Int = 0 TO N - 1:
@@ -713,4 +689,108 @@ print(f"- For s > {threshold_state:.2f}, no investment (a=0) is more likely")
 print(f"\nThis reflects the trade-off:")
 print(f"- Low state: Investment pays off (builds future value)")
 print(f"- High state: Already earning good rewards, investment cost outweighs benefit")
+```
+
+## Comparative Statics: Effect of β on Value Functions
+
+This section examines how the value functions change as we vary the reward coefficient β from 0 to 2.
+
+```{python}
+#| label: comparative-statics-setup
+
+import matplotlib.colors as mcolors
+
+def solve_and_extract_values(beta_val):
+    """Solve MDP and extract value functions for given beta."""
+    torch.manual_seed(42)
+    v0_net_cs, v1_net_cs, _, _ = solve_value_function(
+        beta=beta_val,
+        gamma=gamma,
+        delta=delta,
+        s_min=s_min,
+        s_max=s_max,
+        hidden_sizes=hidden_sizes,
+        learning_rate=learning_rate,
+        batch_size=batch_size,
+        tolerance=tolerance,
+        max_iterations=max_iterations,
+    )
+    with torch.no_grad():
+        v0_vals = evaluate_network(v0_net_cs, s_eval).numpy()
+        v1_vals = evaluate_network(v1_net_cs, s_eval).numpy()
+    return v0_vals, v1_vals
+
+# Beta values from 0 to 2 in steps of 0.25
+beta_values = np.arange(0, 2.25, 0.25)
+n_beta = len(beta_values)
+
+# Solve for all beta values
+print("Solving for different β values...")
+results_beta = {}
+for b in beta_values:
+    v0_vals, v1_vals = solve_and_extract_values(b)
+    results_beta[b] = {'v0': v0_vals, 'v1': v1_vals}
+    print(f"  β = {b:.2f} done")
+print("Complete!")
+
+# Define color gradients
+cmap_blue = mcolors.LinearSegmentedColormap.from_list('black_blue', ['black', 'blue'])
+cmap_red = mcolors.LinearSegmentedColormap.from_list('black_red', ['black', 'red'])
+```
+
+### Value Functions by Action
+
+```{python}
+#| fig-cap: "Value functions v(s,a) as β varies from 0 to 2. Left: a=0 (black→blue). Right: a=1 (black→red)."
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+# Plot v(s, 0) - No investment (black to blue)
+ax0 = axes[0]
+for i, b in enumerate(beta_values):
+    color = cmap_blue(i / (n_beta - 1))
+    ax0.plot(s_np, results_beta[b]['v0'], color=color, linewidth=1.5, alpha=0.8)
+ax0.set_xlabel('State s')
+ax0.set_ylabel('v(s, 0)')
+ax0.set_title('Value Function: No Investment (a=0)')
+ax0.grid(True, alpha=0.3)
+
+# Add colorbar
+sm0 = plt.cm.ScalarMappable(cmap=cmap_blue, norm=plt.Normalize(vmin=0, vmax=2))
+sm0.set_array([])
+cbar0 = plt.colorbar(sm0, ax=ax0)
+cbar0.set_label('β')
+
+# Plot v(s, 1) - Investment (black to red)
+ax1 = axes[1]
+for i, b in enumerate(beta_values):
+    color = cmap_red(i / (n_beta - 1))
+    ax1.plot(s_np, results_beta[b]['v1'], color=color, linewidth=1.5, alpha=0.8)
+ax1.set_xlabel('State s')
+ax1.set_ylabel('v(s, 1)')
+ax1.set_title('Value Function: Investment (a=1)')
+ax1.grid(True, alpha=0.3)
+
+# Add colorbar
+sm1 = plt.cm.ScalarMappable(cmap=cmap_red, norm=plt.Normalize(vmin=0, vmax=2))
+sm1.set_array([])
+cbar1 = plt.colorbar(sm1, ax=ax1)
+cbar1.set_label('β')
+
+plt.tight_layout()
+plt.show()
+```
+
+### Summary
+
+```{python}
+print("Comparative Statics Summary: Effect of β on Value Functions")
+print("=" * 60)
+print(f"\nFixed parameters: γ={gamma}, δ={delta}")
+print(f"β varied from 0 to 2 in steps of 0.25")
+print(f"\nKey observations:")
+print("• As β increases, both value functions increase (higher rewards)")
+print("• v(s,0) and v(s,1) both become steeper (more sensitive to state)")
+print("• At β=0, values are purely from discounted future option value")
+print("• At high β, current-period rewards dominate the value functions")
 ```

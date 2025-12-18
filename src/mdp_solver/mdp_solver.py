@@ -182,25 +182,23 @@ def compute_bellman_targets(
     beta: Scalar,
     gamma: Scalar,
     delta: Scalar,
-    s_min: Scalar,
-    s_max: Scalar,
 ) -> TargetPair:
     """Compute Bellman target values.
     
     Implements COMPUTE_BELLMAN_TARGETS from pseudo code:
         target_a = r(s, a) + δ * V(s')
+    
+    No clamping - unbounded state space. Networks must extrapolate.
     """
-    # Compute targets for action 0
+    # Compute targets for action 0 (no clamping - unbounded state space)
     r0: TensorVector = compute_reward(s, action=0, beta=beta)
     s_next0: TensorVector = compute_next_state(s, action=0, gamma=gamma)
-    s_next0 = clamp_states(s_next0, s_min, s_max)
     V_next0: TensorVector = compute_integrated_value(v0_net, v1_net, s_next0)
     target0: TensorVector = r0 + delta * V_next0
     
-    # Compute targets for action 1
+    # Compute targets for action 1 (no clamping - unbounded state space)
     r1: TensorVector = compute_reward(s, action=1, beta=beta)
     s_next1: TensorVector = compute_next_state(s, action=1, gamma=gamma)
-    s_next1 = clamp_states(s_next1, s_min, s_max)
     V_next1: TensorVector = compute_integrated_value(v0_net, v1_net, s_next1)
     target1: TensorVector = r1 + delta * V_next1
     
@@ -370,7 +368,7 @@ def solve_value_function(
             target1: TensorVector
             target0, target1 = compute_bellman_targets(
                 v0_net, v1_net, s_batch,
-                beta, gamma, delta, s_min, s_max,
+                beta, gamma, delta,
             )
         
         # Compute loss

@@ -64,7 +64,6 @@ class TestComputeBellmanTargets:
         target0, target1 = compute_bellman_targets(
             v0_net, v1_net, s,
             beta=1.0, gamma=0.1, delta=0.95,
-            s_min=0.0, s_max=10.0,
         )
         
         assert target0.shape == (50,)
@@ -80,7 +79,6 @@ class TestComputeBellmanTargets:
         target0, target1 = compute_bellman_targets(
             v0_net, v1_net, s,
             beta=beta, gamma=0.1, delta=0.0,
-            s_min=0.0, s_max=15.0,
         )
         
         expected0 = beta * torch.log(1 + s)  # action 0
