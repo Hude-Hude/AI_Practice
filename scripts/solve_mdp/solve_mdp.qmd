@@ -515,15 +515,23 @@ INPUT:
   v₁_net : Network                   # Network for action 1
   s      : Vector[N]                 # States
 OUTPUT:
-  prob   : Vector[N]                 # P(a=1|s)
+  prob₀  : Vector[N]                 # P(a=0|s)
+  prob₁  : Vector[N]                 # P(a=1|s)
 
   v₀ : Vector[N] ← EVALUATE_NETWORK(v₀_net, s)
   v₁ : Vector[N] ← EVALUATE_NETWORK(v₁_net, s)
   
   FOR i : Int = 0 TO N - 1:
-    diff : Scalar ← v₁[i] - v₀[i]
-    prob[i] : Scalar ← 1 / (1 + exp(-diff))
-  RETURN prob
+    # Numerically stable softmax
+    v_max : Scalar ← max(v₀[i], v₁[i])
+    exp₀ : Scalar ← exp(v₀[i] - v_max)
+    exp₁ : Scalar ← exp(v₁[i] - v_max)
+    sum_exp : Scalar ← exp₀ + exp₁
+    
+    prob₀[i] : Scalar ← exp₀ / sum_exp
+    prob₁[i] : Scalar ← exp₁ / sum_exp
+  
+  RETURN (prob₀, prob₁)
 ```
 
 ### Convergence
@@ -535,3 +543,171 @@ Key properties:
 - **Continuous approximation**: No grid discretization or interpolation required
 - **Scalability**: Extends naturally to high-dimensional state spaces
 - **Economic structure**: Monotonicity enforced architecturally via non-negative weights
+
+## Implementation
+
+```{python}
+import torch
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Add project root to path
+import sys
+sys.path.insert(0, "../../src")
+
+from mdp_solver import solve_value_function, compute_choice_probability, evaluate_network, compute_integrated_value
+```
+
+### Model Parameters
+
+```{python}
+# Model parameters
+beta = 0.1      # Reward coefficient (diminishing returns)
+gamma = 0.1     # State decay rate
+delta = 0.95    # Discount factor
+
+# State space bounds
+s_min = 0.0
+s_max = 10.0
+
+# Neural network architecture
+hidden_sizes = [32, 32]
+
+# Training parameters
+learning_rate = 0.01
+batch_size = 128
+tolerance = 1e-4
+max_iterations = 2000
+
+print(f"Model: u(s,a) = {beta} * log(1+s) - a")
+print(f"Transition: s' = {1-gamma:.1f} * s + a")
+print(f"Discount factor: δ = {delta}")
+```
+
+### Solve the MDP
+
+```{python}
+# Set random seed for reproducibility
+torch.manual_seed(42)
+
+# Solve for value functions
+v0_net, v1_net, losses, n_iter = solve_value_function(
+    beta=beta,
+    gamma=gamma,
+    delta=delta,
+    s_min=s_min,
+    s_max=s_max,
+    hidden_sizes=hidden_sizes,
+    learning_rate=learning_rate,
+    batch_size=batch_size,
+    tolerance=tolerance,
+    max_iterations=max_iterations,
+)
+
+print(f"Converged in {n_iter} iterations")
+print(f"Final RMSE: {losses[-1]**0.5:.2e}")
+```
+
+### Results
+
+#### Convergence Plot
+
+```{python}
+#| fig-cap: "Convergence of the Bellman residual over training iterations"
+
+plt.figure(figsize=(10, 4))
+plt.semilogy(losses, 'b-', linewidth=0.5)
+plt.xlabel('Iteration')
+plt.ylabel('MSE Loss')
+plt.title('Training Convergence')
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.show()
+```
+
+#### Value Functions
+
+```{python}
+#| fig-cap: "Choice-specific value functions v(s, a) for each action"
+
+# Create evaluation grid
+s_eval = torch.linspace(s_min, s_max, 200)
+
+# Evaluate value functions
+with torch.no_grad():
+    v0_values = evaluate_network(v0_net, s_eval).numpy()
+    v1_values = evaluate_network(v1_net, s_eval).numpy()
+    V_bar = compute_integrated_value(v0_net, v1_net, s_eval).numpy()
+
+s_np = s_eval.numpy()
+
+plt.figure(figsize=(10, 5))
+plt.plot(s_np, v0_values, 'b-', label='v(s, 0) - No investment', linewidth=2)
+plt.plot(s_np, v1_values, 'r-', label='v(s, 1) - Invest', linewidth=2)
+plt.plot(s_np, V_bar, 'k--', label='V̄(s) - Integrated value', linewidth=2)
+plt.xlabel('State s')
+plt.ylabel('Value')
+plt.title('Choice-Specific and Integrated Value Functions')
+plt.legend()
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.show()
+```
+
+#### Choice Probabilities
+
+```{python}
+#| fig-cap: "Probability of choosing each action as a function of state"
+
+# Compute choice probabilities
+with torch.no_grad():
+    prob_a0, prob_a1 = compute_choice_probability(v0_net, v1_net, s_eval)
+    prob_a0 = prob_a0.numpy()
+    prob_a1 = prob_a1.numpy()
+
+plt.figure(figsize=(10, 5))
+plt.plot(s_np, prob_a0, 'b-', label='P(a=0|s) - No investment', linewidth=2)
+plt.plot(s_np, prob_a1, 'r-', label='P(a=1|s) - Invest', linewidth=2)
+plt.xlabel('State s')
+plt.ylabel('Probability')
+plt.title('Choice Probabilities')
+plt.ylim(-0.05, 1.05)
+plt.legend()
+plt.grid(True, alpha=0.3)
+plt.axhline(y=0.5, color='gray', linestyle='--', alpha=0.5)
+plt.tight_layout()
+plt.show()
+```
+
+#### Value Difference
+
+```{python}
+#| fig-cap: "Value difference v(s,1) - v(s,0) determines the choice probability"
+
+plt.figure(figsize=(10, 5))
+value_diff = v1_values - v0_values
+plt.plot(s_np, value_diff, 'm-', linewidth=2)
+plt.xlabel('State s')
+plt.ylabel('v(s, 1) - v(s, 0)')
+plt.title('Value Difference: Benefit of Investment')
+plt.grid(True, alpha=0.3)
+plt.axhline(y=0, color='gray', linestyle='--', alpha=0.5)
+plt.tight_layout()
+plt.show()
+```
+
+### Interpretation
+
+```{python}
+# Find threshold state where P(a=1) ≈ 0.5
+threshold_idx = np.argmin(np.abs(prob_a1 - 0.5))
+threshold_state = s_np[threshold_idx]
+
+print(f"Policy Interpretation (β={beta}, γ={gamma}, δ={delta}):")
+print(f"- At state s ≈ {threshold_state:.2f}, the agent is indifferent between actions")
+print(f"- For s < {threshold_state:.2f}, investment (a=1) is more likely")
+print(f"- For s > {threshold_state:.2f}, no investment (a=0) is more likely")
+print(f"\nThis reflects the trade-off:")
+print(f"- Low state: Investment pays off (builds future value)")
+print(f"- High state: Already earning good rewards, investment cost outweighs benefit")
+```

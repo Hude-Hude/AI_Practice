@@ -229,19 +229,30 @@ def compute_choice_probability(
     v0_net: nn.Module,
     v1_net: nn.Module,
     s: TensorVector,
-) -> TensorVector:
-    """Compute probability of choosing action 1.
+) -> Tuple[TensorVector, TensorVector]:
+    """Compute choice probabilities for both actions.
     
-    Implements COMPUTE_CHOICE_PROBABILITY from pseudo code:
-        P(a=1|s) = sigmoid(v1(s) - v0(s))
+    Implements COMPUTE_CHOICE_PROBABILITY from pseudo code.
+    Uses numerically stable softmax computation.
+    
+    Returns
+    -------
+    Tuple[TensorVector, TensorVector]
+        (prob0, prob1) - P(a=0|s) and P(a=1|s)
     """
     v0: TensorVector = evaluate_network(v0_net, s)
     v1: TensorVector = evaluate_network(v1_net, s)
     
-    diff: TensorVector = v1 - v0
-    prob: TensorVector = torch.sigmoid(diff)
+    # Numerically stable softmax
+    v_max: TensorVector = torch.maximum(v0, v1)
+    exp0: TensorVector = torch.exp(v0 - v_max)
+    exp1: TensorVector = torch.exp(v1 - v_max)
+    sum_exp: TensorVector = exp0 + exp1
     
-    return prob
+    prob0: TensorVector = exp0 / sum_exp
+    prob1: TensorVector = exp1 / sum_exp
+    
+    return (prob0, prob1)
 
 
 # =============================================================================

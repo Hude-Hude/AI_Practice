@@ -137,21 +137,33 @@ class TestComputeChoiceProbability:
         v0_net = build_monotonic_network([8])
         v1_net = build_monotonic_network([8])
         s = torch.linspace(0, 10, 50)
-        prob = compute_choice_probability(v0_net, v1_net, s)
-        assert prob.shape == (50,)
+        prob0, prob1 = compute_choice_probability(v0_net, v1_net, s)
+        assert prob0.shape == (50,)
+        assert prob1.shape == (50,)
 
     def test_bounds(self) -> None:
-        """Probability should be in [0, 1]."""
+        """Probabilities should be in [0, 1]."""
         torch.manual_seed(42)
         v0_net = build_monotonic_network([8])
         v1_net = build_monotonic_network([8])
         s = torch.linspace(0, 10, 100)
-        prob = compute_choice_probability(v0_net, v1_net, s)
-        assert torch.all(prob >= 0)
-        assert torch.all(prob <= 1)
+        prob0, prob1 = compute_choice_probability(v0_net, v1_net, s)
+        assert torch.all(prob0 >= 0)
+        assert torch.all(prob0 <= 1)
+        assert torch.all(prob1 >= 0)
+        assert torch.all(prob1 <= 1)
 
-    def test_sigmoid_formula(self) -> None:
-        """Should equal sigmoid(v1 - v0)."""
+    def test_sum_to_one(self) -> None:
+        """Probabilities should sum to 1."""
+        torch.manual_seed(42)
+        v0_net = build_monotonic_network([8])
+        v1_net = build_monotonic_network([8])
+        s = torch.linspace(0, 10, 100)
+        prob0, prob1 = compute_choice_probability(v0_net, v1_net, s)
+        torch.testing.assert_close(prob0 + prob1, torch.ones_like(prob0))
+
+    def test_softmax_formula(self) -> None:
+        """Should equal softmax of value functions."""
         torch.manual_seed(42)
         v0_net = build_monotonic_network([8])
         v1_net = build_monotonic_network([8])
@@ -159,7 +171,11 @@ class TestComputeChoiceProbability:
         
         v0 = evaluate_network(v0_net, s)
         v1 = evaluate_network(v1_net, s)
-        prob = compute_choice_probability(v0_net, v1_net, s)
+        prob0, prob1 = compute_choice_probability(v0_net, v1_net, s)
         
-        expected = torch.sigmoid(v1 - v0)
-        torch.testing.assert_close(prob, expected)
+        # Expected via softmax
+        v_stack = torch.stack([v0, v1], dim=1)
+        expected = torch.softmax(v_stack, dim=1)
+        
+        torch.testing.assert_close(prob0, expected[:, 0])
+        torch.testing.assert_close(prob1, expected[:, 1])
