@@ -142,6 +142,13 @@ window.Quarto = {
   <li><a href="#results" id="toc-results" class="nav-link" data-scroll-target="#results">Results</a></li>
   <li><a href="#interpretation-1" id="toc-interpretation-1" class="nav-link" data-scroll-target="#interpretation-1">Interpretation</a></li>
   </ul></li>
+  <li><a href="#comparative-statics" id="toc-comparative-statics" class="nav-link" data-scroll-target="#comparative-statics">Comparative Statics</a>
+  <ul class="collapse">
+  <li><a href="#effect-of-β-on-value-functions" id="toc-effect-of-β-on-value-functions" class="nav-link" data-scroll-target="#effect-of-β-on-value-functions">Effect of β on Value Functions</a></li>
+  <li><a href="#effect-of-β-on-choice-probabilities" id="toc-effect-of-β-on-choice-probabilities" class="nav-link" data-scroll-target="#effect-of-β-on-choice-probabilities">Effect of β on Choice Probabilities</a></li>
+  <li><a href="#combined-value-functions-view" id="toc-combined-value-functions-view" class="nav-link" data-scroll-target="#combined-value-functions-view">Combined Value Functions View</a></li>
+  <li><a href="#summary" id="toc-summary" class="nav-link" data-scroll-target="#summary">Summary</a></li>
+  </ul></li>
   </ul>
 </nav>
 </div>
@@ -631,7 +638,7 @@ OUTPUT:
 </section>
 <section id="implementation" class="level2">
 <h2 class="anchored" data-anchor-id="implementation">Implementation</h2>
-<div id="48205696" class="cell" data-execution_count="1">
+<div id="00d7cbdb" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
 <span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
@@ -644,7 +651,7 @@ OUTPUT:
 </div>
 <section id="model-parameters" class="level3">
 <h3 class="anchored" data-anchor-id="model-parameters">Model Parameters</h3>
-<div id="b2a409c1" class="cell" data-execution_count="2">
+<div id="b1ce817f" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Model parameters</span></span>
 <span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>beta <span class="op">=</span> <span class="fl">0.1</span>      <span class="co"># Reward coefficient (diminishing returns)</span></span>
 <span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>gamma <span class="op">=</span> <span class="fl">0.1</span>     <span class="co"># State decay rate</span></span>
@@ -652,7 +659,7 @@ OUTPUT:
 <span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a><span class="co"># State space bounds</span></span>
 <span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>s_min <span class="op">=</span> <span class="fl">0.0</span></span>
-<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a>s_max <span class="op">=</span> <span class="fl">10.0</span></span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a>s_max <span class="op">=</span> <span class="fl">20.0</span></span>
 <span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Neural network architecture</span></span>
 <span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a>hidden_sizes <span class="op">=</span> [<span class="dv">32</span>, <span class="dv">32</span>]</span>
@@ -675,7 +682,7 @@ Discount factor: δ = 0.95</code></pre>
 </section>
 <section id="solve-the-mdp" class="level3">
 <h3 class="anchored" data-anchor-id="solve-the-mdp">Solve the MDP</h3>
-<div id="2c198f02" class="cell" data-execution_count="3">
+<div id="solve-baseline" class="cell" data-cache="true" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Set random seed for reproducibility</span></span>
 <span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>torch.manual_seed(<span class="dv">42</span>)</span>
 <span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -697,7 +704,7 @@ Discount factor: δ = 0.95</code></pre>
 <span id="cb21-19"><a href="#cb21-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Final RMSE: </span><span class="sc">{</span>losses[<span class="op">-</span><span class="dv">1</span>]<span class="op">**</span><span class="fl">0.5</span><span class="sc">:.2e}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Converged in 2000 iterations
-Final RMSE: 4.15e+00</code></pre>
+Final RMSE: 1.02e+01</code></pre>
 </div>
 </div>
 </section>
@@ -705,7 +712,7 @@ Final RMSE: 4.15e+00</code></pre>
 <h3 class="anchored" data-anchor-id="results">Results</h3>
 <section id="convergence-plot" class="level4">
 <h4 class="anchored" data-anchor-id="convergence-plot">Convergence Plot</h4>
-<div id="ee24abec" class="cell" data-execution_count="4">
+<div id="6d101c75" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>plt.figure(figsize<span class="op">=</span>(<span class="dv">10</span>, <span class="dv">4</span>))</span>
 <span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a>plt.semilogy(losses, <span class="st">'b-'</span>, linewidth<span class="op">=</span><span class="fl">0.5</span>)</span>
 <span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">'Iteration'</span>)</span>
@@ -726,7 +733,7 @@ Final RMSE: 4.15e+00</code></pre>
 </section>
 <section id="value-functions" class="level4">
 <h4 class="anchored" data-anchor-id="value-functions">Value Functions</h4>
-<div id="915a9ae8" class="cell" data-execution_count="5">
+<div id="1bb7e07e" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Create evaluation grid</span></span>
 <span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a>s_eval <span class="op">=</span> torch.linspace(s_min, s_max, <span class="dv">200</span>)</span>
 <span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -761,7 +768,7 @@ Final RMSE: 4.15e+00</code></pre>
 </section>
 <section id="choice-probabilities" class="level4">
 <h4 class="anchored" data-anchor-id="choice-probabilities">Choice Probabilities</h4>
-<div id="3a4b934f" class="cell" data-execution_count="6">
+<div id="d899a842" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Compute choice probabilities</span></span>
 <span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> torch.no_grad():</span>
 <span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a>    prob_a0, prob_a1 <span class="op">=</span> compute_choice_probability(v0_net, v1_net, s_eval)</span>
@@ -792,7 +799,7 @@ Final RMSE: 4.15e+00</code></pre>
 </section>
 <section id="value-difference" class="level4">
 <h4 class="anchored" data-anchor-id="value-difference">Value Difference</h4>
-<div id="d9c2a57f" class="cell" data-execution_count="7">
+<div id="cc82bede" class="cell" data-execution_count="7">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>plt.figure(figsize<span class="op">=</span>(<span class="dv">10</span>, <span class="dv">5</span>))</span>
 <span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a>value_diff <span class="op">=</span> v1_values <span class="op">-</span> v0_values</span>
 <span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a>plt.plot(s_np, value_diff, <span class="st">'m-'</span>, linewidth<span class="op">=</span><span class="dv">2</span>)</span>
@@ -816,7 +823,7 @@ Final RMSE: 4.15e+00</code></pre>
 </section>
 <section id="interpretation-1" class="level3">
 <h3 class="anchored" data-anchor-id="interpretation-1">Interpretation</h3>
-<div id="f2970bf0" class="cell" data-execution_count="8">
+<div id="8db02834" class="cell" data-execution_count="8">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Find threshold state where P(a=1) ≈ 0.5</span></span>
 <span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a>threshold_idx <span class="op">=</span> np.argmin(np.<span class="bu">abs</span>(prob_a1 <span class="op">-</span> <span class="fl">0.5</span>))</span>
 <span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a>threshold_state <span class="op">=</span> s_np[threshold_idx]</span>
@@ -827,16 +834,248 @@ Final RMSE: 4.15e+00</code></pre>
 <span id="cb27-8"><a href="#cb27-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"- For s &gt; </span><span class="sc">{</span>threshold_state<span class="sc">:.2f}</span><span class="ss">, no investment (a=0) is more likely"</span>)</span>
 <span id="cb27-9"><a href="#cb27-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"</span><span class="ch">\n</span><span class="ss">This reflects the trade-off:"</span>)</span>
 <span id="cb27-10"><a href="#cb27-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"- Low state: Investment pays off (builds future value)"</span>)</span>
-<span id="cb27-11"><a href="#cb27-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"- High state: Already earning good rewards, investment cost outweighs benefit"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb27-11"><a href="#cb27-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"- High state: Already earning good rewards, investment cost outweighs benefit"</span>)</span>
+<span id="cb27-12"><a href="#cb27-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-13"><a href="#cb27-13" aria-hidden="true" tabindex="-1"></a><span class="co"># Store baseline results for comparative statics</span></span>
+<span id="cb27-14"><a href="#cb27-14" aria-hidden="true" tabindex="-1"></a>baseline_results <span class="op">=</span> {</span>
+<span id="cb27-15"><a href="#cb27-15" aria-hidden="true" tabindex="-1"></a>    <span class="st">'beta'</span>: beta, <span class="st">'gamma'</span>: gamma, <span class="st">'delta'</span>: delta,</span>
+<span id="cb27-16"><a href="#cb27-16" aria-hidden="true" tabindex="-1"></a>    <span class="st">'v0_net'</span>: v0_net, <span class="st">'v1_net'</span>: v1_net,</span>
+<span id="cb27-17"><a href="#cb27-17" aria-hidden="true" tabindex="-1"></a>    <span class="st">'prob_a1'</span>: prob_a1, <span class="st">'threshold'</span>: threshold_state</span>
+<span id="cb27-18"><a href="#cb27-18" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Policy Interpretation (β=0.1, γ=0.1, δ=0.95):
-- At state s ≈ 8.14, the agent is indifferent between actions
-- For s &lt; 8.14, investment (a=1) is more likely
-- For s &gt; 8.14, no investment (a=0) is more likely
+- At state s ≈ 3.12, the agent is indifferent between actions
+- For s &lt; 3.12, investment (a=1) is more likely
+- For s &gt; 3.12, no investment (a=0) is more likely
 
 This reflects the trade-off:
 - Low state: Investment pays off (builds future value)
 - High state: Already earning good rewards, investment cost outweighs benefit</code></pre>
+</div>
+</div>
+</section>
+</section>
+<section id="comparative-statics" class="level2">
+<h2 class="anchored" data-anchor-id="comparative-statics">Comparative Statics</h2>
+<p>This section examines how the optimal policy changes when we vary the reward coefficient β.</p>
+<div id="comparative-statics-setup" class="cell" data-cache="true" data-execution_count="9">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.colors <span class="im">as</span> mcolors</span>
+<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> solve_and_extract_full(beta_val, gamma_val, delta_val):</span>
+<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Solve MDP and extract value functions and probabilities."""</span></span>
+<span id="cb29-5"><a href="#cb29-5" aria-hidden="true" tabindex="-1"></a>    torch.manual_seed(<span class="dv">42</span>)</span>
+<span id="cb29-6"><a href="#cb29-6" aria-hidden="true" tabindex="-1"></a>    v0_net, v1_net, _, _ <span class="op">=</span> solve_value_function(</span>
+<span id="cb29-7"><a href="#cb29-7" aria-hidden="true" tabindex="-1"></a>        beta<span class="op">=</span>beta_val, gamma<span class="op">=</span>gamma_val, delta<span class="op">=</span>delta_val,</span>
+<span id="cb29-8"><a href="#cb29-8" aria-hidden="true" tabindex="-1"></a>        s_min<span class="op">=</span>s_min, s_max<span class="op">=</span>s_max,</span>
+<span id="cb29-9"><a href="#cb29-9" aria-hidden="true" tabindex="-1"></a>        hidden_sizes<span class="op">=</span>hidden_sizes,</span>
+<span id="cb29-10"><a href="#cb29-10" aria-hidden="true" tabindex="-1"></a>        learning_rate<span class="op">=</span>learning_rate,</span>
+<span id="cb29-11"><a href="#cb29-11" aria-hidden="true" tabindex="-1"></a>        batch_size<span class="op">=</span>batch_size,</span>
+<span id="cb29-12"><a href="#cb29-12" aria-hidden="true" tabindex="-1"></a>        tolerance<span class="op">=</span>tolerance,</span>
+<span id="cb29-13"><a href="#cb29-13" aria-hidden="true" tabindex="-1"></a>        max_iterations<span class="op">=</span>max_iterations,</span>
+<span id="cb29-14"><a href="#cb29-14" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb29-15"><a href="#cb29-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> torch.no_grad():</span>
+<span id="cb29-16"><a href="#cb29-16" aria-hidden="true" tabindex="-1"></a>        v0_vals <span class="op">=</span> evaluate_network(v0_net, s_eval).numpy()</span>
+<span id="cb29-17"><a href="#cb29-17" aria-hidden="true" tabindex="-1"></a>        v1_vals <span class="op">=</span> evaluate_network(v1_net, s_eval).numpy()</span>
+<span id="cb29-18"><a href="#cb29-18" aria-hidden="true" tabindex="-1"></a>        p0, p1 <span class="op">=</span> compute_choice_probability(v0_net, v1_net, s_eval)</span>
+<span id="cb29-19"><a href="#cb29-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> v0_vals, v1_vals, p0.numpy(), p1.numpy()</span>
+<span id="cb29-20"><a href="#cb29-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-21"><a href="#cb29-21" aria-hidden="true" tabindex="-1"></a><span class="co"># Beta values from 0 to 2 in steps of 0.25</span></span>
+<span id="cb29-22"><a href="#cb29-22" aria-hidden="true" tabindex="-1"></a>beta_values <span class="op">=</span> np.arange(<span class="dv">0</span>, <span class="fl">2.25</span>, <span class="fl">0.25</span>)</span>
+<span id="cb29-23"><a href="#cb29-23" aria-hidden="true" tabindex="-1"></a>n_beta <span class="op">=</span> <span class="bu">len</span>(beta_values)</span>
+<span id="cb29-24"><a href="#cb29-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-25"><a href="#cb29-25" aria-hidden="true" tabindex="-1"></a><span class="co"># Solve for all beta values</span></span>
+<span id="cb29-26"><a href="#cb29-26" aria-hidden="true" tabindex="-1"></a>results_beta <span class="op">=</span> {}</span>
+<span id="cb29-27"><a href="#cb29-27" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> b <span class="kw">in</span> beta_values:</span>
+<span id="cb29-28"><a href="#cb29-28" aria-hidden="true" tabindex="-1"></a>    v0, v1, p0, p1 <span class="op">=</span> solve_and_extract_full(b, gamma, delta)</span>
+<span id="cb29-29"><a href="#cb29-29" aria-hidden="true" tabindex="-1"></a>    results_beta[b] <span class="op">=</span> {<span class="st">'v0'</span>: v0, <span class="st">'v1'</span>: v1, <span class="st">'p0'</span>: p0, <span class="st">'p1'</span>: p1}</span>
+<span id="cb29-30"><a href="#cb29-30" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"Solved β = </span><span class="sc">{</span>b<span class="sc">:.2f}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Solved β = 0.00
+Solved β = 0.25
+Solved β = 0.50
+Solved β = 0.75
+Solved β = 1.00
+Solved β = 1.25
+Solved β = 1.50
+Solved β = 1.75
+Solved β = 2.00</code></pre>
+</div>
+</div>
+<section id="effect-of-β-on-value-functions" class="level3">
+<h3 class="anchored" data-anchor-id="effect-of-β-on-value-functions">Effect of β on Value Functions</h3>
+<div id="5f2b105d" class="cell" data-execution_count="10">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb31"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">14</span>, <span class="dv">5</span>))</span>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Color gradients: black to blue for a=0, black to red for a=1</span></span>
+<span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a>cmap_blue <span class="op">=</span> mcolors.LinearSegmentedColormap.from_list(<span class="st">'black_blue'</span>, [<span class="st">'black'</span>, <span class="st">'blue'</span>])</span>
+<span id="cb31-5"><a href="#cb31-5" aria-hidden="true" tabindex="-1"></a>cmap_red <span class="op">=</span> mcolors.LinearSegmentedColormap.from_list(<span class="st">'black_red'</span>, [<span class="st">'black'</span>, <span class="st">'red'</span>])</span>
+<span id="cb31-6"><a href="#cb31-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-7"><a href="#cb31-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot v(s, 0) - No investment</span></span>
+<span id="cb31-8"><a href="#cb31-8" aria-hidden="true" tabindex="-1"></a>ax0 <span class="op">=</span> axes[<span class="dv">0</span>]</span>
+<span id="cb31-9"><a href="#cb31-9" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i, b <span class="kw">in</span> <span class="bu">enumerate</span>(beta_values):</span>
+<span id="cb31-10"><a href="#cb31-10" aria-hidden="true" tabindex="-1"></a>    color <span class="op">=</span> cmap_blue(i <span class="op">/</span> (n_beta <span class="op">-</span> <span class="dv">1</span>))</span>
+<span id="cb31-11"><a href="#cb31-11" aria-hidden="true" tabindex="-1"></a>    ax0.plot(s_np, results_beta[b][<span class="st">'v0'</span>], color<span class="op">=</span>color, linewidth<span class="op">=</span><span class="fl">1.5</span>, alpha<span class="op">=</span><span class="fl">0.8</span>)</span>
+<span id="cb31-12"><a href="#cb31-12" aria-hidden="true" tabindex="-1"></a>ax0.set_xlabel(<span class="st">'State s'</span>)</span>
+<span id="cb31-13"><a href="#cb31-13" aria-hidden="true" tabindex="-1"></a>ax0.set_ylabel(<span class="st">'v(s, 0)'</span>)</span>
+<span id="cb31-14"><a href="#cb31-14" aria-hidden="true" tabindex="-1"></a>ax0.set_title(<span class="st">'Value Function: No Investment (a=0)'</span>)</span>
+<span id="cb31-15"><a href="#cb31-15" aria-hidden="true" tabindex="-1"></a>ax0.grid(<span class="va">True</span>, alpha<span class="op">=</span><span class="fl">0.3</span>)</span>
+<span id="cb31-16"><a href="#cb31-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-17"><a href="#cb31-17" aria-hidden="true" tabindex="-1"></a><span class="co"># Add colorbar for a=0</span></span>
+<span id="cb31-18"><a href="#cb31-18" aria-hidden="true" tabindex="-1"></a>sm0 <span class="op">=</span> plt.cm.ScalarMappable(cmap<span class="op">=</span>cmap_blue, norm<span class="op">=</span>plt.Normalize(vmin<span class="op">=</span><span class="dv">0</span>, vmax<span class="op">=</span><span class="dv">2</span>))</span>
+<span id="cb31-19"><a href="#cb31-19" aria-hidden="true" tabindex="-1"></a>sm0.set_array([])</span>
+<span id="cb31-20"><a href="#cb31-20" aria-hidden="true" tabindex="-1"></a>cbar0 <span class="op">=</span> plt.colorbar(sm0, ax<span class="op">=</span>ax0)</span>
+<span id="cb31-21"><a href="#cb31-21" aria-hidden="true" tabindex="-1"></a>cbar0.set_label(<span class="st">'β'</span>)</span>
+<span id="cb31-22"><a href="#cb31-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-23"><a href="#cb31-23" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot v(s, 1) - Investment</span></span>
+<span id="cb31-24"><a href="#cb31-24" aria-hidden="true" tabindex="-1"></a>ax1 <span class="op">=</span> axes[<span class="dv">1</span>]</span>
+<span id="cb31-25"><a href="#cb31-25" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i, b <span class="kw">in</span> <span class="bu">enumerate</span>(beta_values):</span>
+<span id="cb31-26"><a href="#cb31-26" aria-hidden="true" tabindex="-1"></a>    color <span class="op">=</span> cmap_red(i <span class="op">/</span> (n_beta <span class="op">-</span> <span class="dv">1</span>))</span>
+<span id="cb31-27"><a href="#cb31-27" aria-hidden="true" tabindex="-1"></a>    ax1.plot(s_np, results_beta[b][<span class="st">'v1'</span>], color<span class="op">=</span>color, linewidth<span class="op">=</span><span class="fl">1.5</span>, alpha<span class="op">=</span><span class="fl">0.8</span>)</span>
+<span id="cb31-28"><a href="#cb31-28" aria-hidden="true" tabindex="-1"></a>ax1.set_xlabel(<span class="st">'State s'</span>)</span>
+<span id="cb31-29"><a href="#cb31-29" aria-hidden="true" tabindex="-1"></a>ax1.set_ylabel(<span class="st">'v(s, 1)'</span>)</span>
+<span id="cb31-30"><a href="#cb31-30" aria-hidden="true" tabindex="-1"></a>ax1.set_title(<span class="st">'Value Function: Investment (a=1)'</span>)</span>
+<span id="cb31-31"><a href="#cb31-31" aria-hidden="true" tabindex="-1"></a>ax1.grid(<span class="va">True</span>, alpha<span class="op">=</span><span class="fl">0.3</span>)</span>
+<span id="cb31-32"><a href="#cb31-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-33"><a href="#cb31-33" aria-hidden="true" tabindex="-1"></a><span class="co"># Add colorbar for a=1</span></span>
+<span id="cb31-34"><a href="#cb31-34" aria-hidden="true" tabindex="-1"></a>sm1 <span class="op">=</span> plt.cm.ScalarMappable(cmap<span class="op">=</span>cmap_red, norm<span class="op">=</span>plt.Normalize(vmin<span class="op">=</span><span class="dv">0</span>, vmax<span class="op">=</span><span class="dv">2</span>))</span>
+<span id="cb31-35"><a href="#cb31-35" aria-hidden="true" tabindex="-1"></a>sm1.set_array([])</span>
+<span id="cb31-36"><a href="#cb31-36" aria-hidden="true" tabindex="-1"></a>cbar1 <span class="op">=</span> plt.colorbar(sm1, ax<span class="op">=</span>ax1)</span>
+<span id="cb31-37"><a href="#cb31-37" aria-hidden="true" tabindex="-1"></a>cbar1.set_label(<span class="st">'β'</span>)</span>
+<span id="cb31-38"><a href="#cb31-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-39"><a href="#cb31-39" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb31-40"><a href="#cb31-40" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="solve_mdp_files/figure-html/cell-11-output-1.png" width="1317" height="470" class="figure-img"></p>
+<figcaption>Value functions v(s,a) as β varies from 0 to 2. Blue gradient: a=0, Red gradient: a=1.</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="effect-of-β-on-choice-probabilities" class="level3">
+<h3 class="anchored" data-anchor-id="effect-of-β-on-choice-probabilities">Effect of β on Choice Probabilities</h3>
+<div id="b470eeaa" class="cell" data-execution_count="11">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb32"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">14</span>, <span class="dv">5</span>))</span>
+<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot P(a=0|s) - Probability of no investment</span></span>
+<span id="cb32-4"><a href="#cb32-4" aria-hidden="true" tabindex="-1"></a>ax0 <span class="op">=</span> axes[<span class="dv">0</span>]</span>
+<span id="cb32-5"><a href="#cb32-5" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i, b <span class="kw">in</span> <span class="bu">enumerate</span>(beta_values):</span>
+<span id="cb32-6"><a href="#cb32-6" aria-hidden="true" tabindex="-1"></a>    color <span class="op">=</span> cmap_blue(i <span class="op">/</span> (n_beta <span class="op">-</span> <span class="dv">1</span>))</span>
+<span id="cb32-7"><a href="#cb32-7" aria-hidden="true" tabindex="-1"></a>    ax0.plot(s_np, results_beta[b][<span class="st">'p0'</span>], color<span class="op">=</span>color, linewidth<span class="op">=</span><span class="fl">1.5</span>, alpha<span class="op">=</span><span class="fl">0.8</span>)</span>
+<span id="cb32-8"><a href="#cb32-8" aria-hidden="true" tabindex="-1"></a>ax0.set_xlabel(<span class="st">'State s'</span>)</span>
+<span id="cb32-9"><a href="#cb32-9" aria-hidden="true" tabindex="-1"></a>ax0.set_ylabel(<span class="st">'P(a = 0 | s)'</span>)</span>
+<span id="cb32-10"><a href="#cb32-10" aria-hidden="true" tabindex="-1"></a>ax0.set_title(<span class="st">'Choice Probability: No Investment'</span>)</span>
+<span id="cb32-11"><a href="#cb32-11" aria-hidden="true" tabindex="-1"></a>ax0.set_ylim(<span class="op">-</span><span class="fl">0.05</span>, <span class="fl">1.05</span>)</span>
+<span id="cb32-12"><a href="#cb32-12" aria-hidden="true" tabindex="-1"></a>ax0.axhline(y<span class="op">=</span><span class="fl">0.5</span>, color<span class="op">=</span><span class="st">'gray'</span>, linestyle<span class="op">=</span><span class="st">'--'</span>, alpha<span class="op">=</span><span class="fl">0.5</span>)</span>
+<span id="cb32-13"><a href="#cb32-13" aria-hidden="true" tabindex="-1"></a>ax0.grid(<span class="va">True</span>, alpha<span class="op">=</span><span class="fl">0.3</span>)</span>
+<span id="cb32-14"><a href="#cb32-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-15"><a href="#cb32-15" aria-hidden="true" tabindex="-1"></a>sm0 <span class="op">=</span> plt.cm.ScalarMappable(cmap<span class="op">=</span>cmap_blue, norm<span class="op">=</span>plt.Normalize(vmin<span class="op">=</span><span class="dv">0</span>, vmax<span class="op">=</span><span class="dv">2</span>))</span>
+<span id="cb32-16"><a href="#cb32-16" aria-hidden="true" tabindex="-1"></a>sm0.set_array([])</span>
+<span id="cb32-17"><a href="#cb32-17" aria-hidden="true" tabindex="-1"></a>cbar0 <span class="op">=</span> plt.colorbar(sm0, ax<span class="op">=</span>ax0)</span>
+<span id="cb32-18"><a href="#cb32-18" aria-hidden="true" tabindex="-1"></a>cbar0.set_label(<span class="st">'β'</span>)</span>
+<span id="cb32-19"><a href="#cb32-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-20"><a href="#cb32-20" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot P(a=1|s) - Probability of investment</span></span>
+<span id="cb32-21"><a href="#cb32-21" aria-hidden="true" tabindex="-1"></a>ax1 <span class="op">=</span> axes[<span class="dv">1</span>]</span>
+<span id="cb32-22"><a href="#cb32-22" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i, b <span class="kw">in</span> <span class="bu">enumerate</span>(beta_values):</span>
+<span id="cb32-23"><a href="#cb32-23" aria-hidden="true" tabindex="-1"></a>    color <span class="op">=</span> cmap_red(i <span class="op">/</span> (n_beta <span class="op">-</span> <span class="dv">1</span>))</span>
+<span id="cb32-24"><a href="#cb32-24" aria-hidden="true" tabindex="-1"></a>    ax1.plot(s_np, results_beta[b][<span class="st">'p1'</span>], color<span class="op">=</span>color, linewidth<span class="op">=</span><span class="fl">1.5</span>, alpha<span class="op">=</span><span class="fl">0.8</span>)</span>
+<span id="cb32-25"><a href="#cb32-25" aria-hidden="true" tabindex="-1"></a>ax1.set_xlabel(<span class="st">'State s'</span>)</span>
+<span id="cb32-26"><a href="#cb32-26" aria-hidden="true" tabindex="-1"></a>ax1.set_ylabel(<span class="st">'P(a = 1 | s)'</span>)</span>
+<span id="cb32-27"><a href="#cb32-27" aria-hidden="true" tabindex="-1"></a>ax1.set_title(<span class="st">'Choice Probability: Investment'</span>)</span>
+<span id="cb32-28"><a href="#cb32-28" aria-hidden="true" tabindex="-1"></a>ax1.set_ylim(<span class="op">-</span><span class="fl">0.05</span>, <span class="fl">1.05</span>)</span>
+<span id="cb32-29"><a href="#cb32-29" aria-hidden="true" tabindex="-1"></a>ax1.axhline(y<span class="op">=</span><span class="fl">0.5</span>, color<span class="op">=</span><span class="st">'gray'</span>, linestyle<span class="op">=</span><span class="st">'--'</span>, alpha<span class="op">=</span><span class="fl">0.5</span>)</span>
+<span id="cb32-30"><a href="#cb32-30" aria-hidden="true" tabindex="-1"></a>ax1.grid(<span class="va">True</span>, alpha<span class="op">=</span><span class="fl">0.3</span>)</span>
+<span id="cb32-31"><a href="#cb32-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-32"><a href="#cb32-32" aria-hidden="true" tabindex="-1"></a>sm1 <span class="op">=</span> plt.cm.ScalarMappable(cmap<span class="op">=</span>cmap_red, norm<span class="op">=</span>plt.Normalize(vmin<span class="op">=</span><span class="dv">0</span>, vmax<span class="op">=</span><span class="dv">2</span>))</span>
+<span id="cb32-33"><a href="#cb32-33" aria-hidden="true" tabindex="-1"></a>sm1.set_array([])</span>
+<span id="cb32-34"><a href="#cb32-34" aria-hidden="true" tabindex="-1"></a>cbar1 <span class="op">=</span> plt.colorbar(sm1, ax<span class="op">=</span>ax1)</span>
+<span id="cb32-35"><a href="#cb32-35" aria-hidden="true" tabindex="-1"></a>cbar1.set_label(<span class="st">'β'</span>)</span>
+<span id="cb32-36"><a href="#cb32-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-37"><a href="#cb32-37" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb32-38"><a href="#cb32-38" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="solve_mdp_files/figure-html/cell-12-output-1.png" width="1317" height="470" class="figure-img"></p>
+<figcaption>Choice probabilities as β varies from 0 to 2. Blue gradient: P(a=0|s), Red gradient: P(a=1|s).</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="combined-value-functions-view" class="level3">
+<h3 class="anchored" data-anchor-id="combined-value-functions-view">Combined Value Functions View</h3>
+<div id="f6d524dd" class="cell" data-execution_count="12">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb33"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>plt.figure(figsize<span class="op">=</span>(<span class="dv">12</span>, <span class="dv">6</span>))</span>
+<span id="cb33-2"><a href="#cb33-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-3"><a href="#cb33-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i, b <span class="kw">in</span> <span class="bu">enumerate</span>(beta_values):</span>
+<span id="cb33-4"><a href="#cb33-4" aria-hidden="true" tabindex="-1"></a>    color_blue <span class="op">=</span> cmap_blue(i <span class="op">/</span> (n_beta <span class="op">-</span> <span class="dv">1</span>))</span>
+<span id="cb33-5"><a href="#cb33-5" aria-hidden="true" tabindex="-1"></a>    color_red <span class="op">=</span> cmap_red(i <span class="op">/</span> (n_beta <span class="op">-</span> <span class="dv">1</span>))</span>
+<span id="cb33-6"><a href="#cb33-6" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb33-7"><a href="#cb33-7" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Plot value functions</span></span>
+<span id="cb33-8"><a href="#cb33-8" aria-hidden="true" tabindex="-1"></a>    plt.plot(s_np, results_beta[b][<span class="st">'v0'</span>], color<span class="op">=</span>color_blue, linewidth<span class="op">=</span><span class="fl">1.2</span>, alpha<span class="op">=</span><span class="fl">0.7</span>)</span>
+<span id="cb33-9"><a href="#cb33-9" aria-hidden="true" tabindex="-1"></a>    plt.plot(s_np, results_beta[b][<span class="st">'v1'</span>], color<span class="op">=</span>color_red, linewidth<span class="op">=</span><span class="fl">1.2</span>, alpha<span class="op">=</span><span class="fl">0.7</span>)</span>
+<span id="cb33-10"><a href="#cb33-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-11"><a href="#cb33-11" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">'State s'</span>)</span>
+<span id="cb33-12"><a href="#cb33-12" aria-hidden="true" tabindex="-1"></a>plt.ylabel(<span class="st">'Value'</span>)</span>
+<span id="cb33-13"><a href="#cb33-13" aria-hidden="true" tabindex="-1"></a>plt.title(<span class="ss">f'Value Functions as β varies from 0 to 2 (γ=</span><span class="sc">{</span>gamma<span class="sc">}</span><span class="ss">, δ=</span><span class="sc">{</span>delta<span class="sc">}</span><span class="ss">)</span><span class="ch">\n</span><span class="ss">Blue: v(s,0), Red: v(s,1)'</span>)</span>
+<span id="cb33-14"><a href="#cb33-14" aria-hidden="true" tabindex="-1"></a>plt.grid(<span class="va">True</span>, alpha<span class="op">=</span><span class="fl">0.3</span>)</span>
+<span id="cb33-15"><a href="#cb33-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-16"><a href="#cb33-16" aria-hidden="true" tabindex="-1"></a><span class="co"># Add colorbars</span></span>
+<span id="cb33-17"><a href="#cb33-17" aria-hidden="true" tabindex="-1"></a>sm_blue <span class="op">=</span> plt.cm.ScalarMappable(cmap<span class="op">=</span>cmap_blue, norm<span class="op">=</span>plt.Normalize(vmin<span class="op">=</span><span class="dv">0</span>, vmax<span class="op">=</span><span class="dv">2</span>))</span>
+<span id="cb33-18"><a href="#cb33-18" aria-hidden="true" tabindex="-1"></a>sm_red <span class="op">=</span> plt.cm.ScalarMappable(cmap<span class="op">=</span>cmap_red, norm<span class="op">=</span>plt.Normalize(vmin<span class="op">=</span><span class="dv">0</span>, vmax<span class="op">=</span><span class="dv">2</span>))</span>
+<span id="cb33-19"><a href="#cb33-19" aria-hidden="true" tabindex="-1"></a>sm_blue.set_array([])</span>
+<span id="cb33-20"><a href="#cb33-20" aria-hidden="true" tabindex="-1"></a>sm_red.set_array([])</span>
+<span id="cb33-21"><a href="#cb33-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-22"><a href="#cb33-22" aria-hidden="true" tabindex="-1"></a><span class="co"># Create axes for colorbars</span></span>
+<span id="cb33-23"><a href="#cb33-23" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> mpl_toolkits.axes_grid1 <span class="im">import</span> make_axes_locatable</span>
+<span id="cb33-24"><a href="#cb33-24" aria-hidden="true" tabindex="-1"></a>ax <span class="op">=</span> plt.gca()</span>
+<span id="cb33-25"><a href="#cb33-25" aria-hidden="true" tabindex="-1"></a>divider <span class="op">=</span> make_axes_locatable(ax)</span>
+<span id="cb33-26"><a href="#cb33-26" aria-hidden="true" tabindex="-1"></a>cax1 <span class="op">=</span> divider.append_axes(<span class="st">"right"</span>, size<span class="op">=</span><span class="st">"2%"</span>, pad<span class="op">=</span><span class="fl">0.1</span>)</span>
+<span id="cb33-27"><a href="#cb33-27" aria-hidden="true" tabindex="-1"></a>cax2 <span class="op">=</span> divider.append_axes(<span class="st">"right"</span>, size<span class="op">=</span><span class="st">"2%"</span>, pad<span class="op">=</span><span class="fl">0.3</span>)</span>
+<span id="cb33-28"><a href="#cb33-28" aria-hidden="true" tabindex="-1"></a>cbar1 <span class="op">=</span> plt.colorbar(sm_blue, cax<span class="op">=</span>cax1)</span>
+<span id="cb33-29"><a href="#cb33-29" aria-hidden="true" tabindex="-1"></a>cbar1.set_label(<span class="st">'β (a=0)'</span>)</span>
+<span id="cb33-30"><a href="#cb33-30" aria-hidden="true" tabindex="-1"></a>cbar2 <span class="op">=</span> plt.colorbar(sm_red, cax<span class="op">=</span>cax2)</span>
+<span id="cb33-31"><a href="#cb33-31" aria-hidden="true" tabindex="-1"></a>cbar2.set_label(<span class="st">'β (a=1)'</span>)</span>
+<span id="cb33-32"><a href="#cb33-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-33"><a href="#cb33-33" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb33-34"><a href="#cb33-34" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="solve_mdp_files/figure-html/cell-13-output-1.png" width="1142" height="567" class="figure-img"></p>
+<figcaption>Both value functions overlaid showing how values change as β increases.</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="summary" class="level3">
+<h3 class="anchored" data-anchor-id="summary">Summary</h3>
+<div id="f933f921" class="cell" data-execution_count="13">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb34"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"Comparative Statics Summary: Effect of β"</span>)</span>
+<span id="cb34-2"><a href="#cb34-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"="</span> <span class="op">*</span> <span class="dv">50</span>)</span>
+<span id="cb34-3"><a href="#cb34-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"</span><span class="ch">\n</span><span class="ss">Fixed parameters: γ=</span><span class="sc">{</span>gamma<span class="sc">}</span><span class="ss">, δ=</span><span class="sc">{</span>delta<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb34-4"><a href="#cb34-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"β varied from 0 to 2 in steps of 0.25"</span>)</span>
+<span id="cb34-5"><a href="#cb34-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">Key insights:"</span>)</span>
+<span id="cb34-6"><a href="#cb34-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"• As β increases, the value of being in a higher state increases"</span>)</span>
+<span id="cb34-7"><a href="#cb34-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"• This shifts the indifference point (where P(a=1)=0.5) to higher states"</span>)</span>
+<span id="cb34-8"><a href="#cb34-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"• At β=0, investment decision is purely based on future state benefits"</span>)</span>
+<span id="cb34-9"><a href="#cb34-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"• At high β, current rewards dominate, reducing investment incentive at high states"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Comparative Statics Summary: Effect of β
+==================================================
+
+Fixed parameters: γ=0.1, δ=0.95
+β varied from 0 to 2 in steps of 0.25
+
+Key insights:
+• As β increases, the value of being in a higher state increases
+• This shifts the indifference point (where P(a=1)=0.5) to higher states
+• At β=0, investment decision is purely based on future state benefits
+• At high β, current rewards dominate, reducing investment incentive at high states</code></pre>
 </div>
 </div>
 </section>

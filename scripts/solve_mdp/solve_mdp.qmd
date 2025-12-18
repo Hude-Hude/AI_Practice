@@ -587,6 +587,9 @@ print(f"Discount factor: δ = {delta}")
 ### Solve the MDP
 
 ```{python}
+#| cache: true
+#| label: solve-baseline
+
 # Set random seed for reproducibility
 torch.manual_seed(42)
 
