@@ -95,7 +95,9 @@ window.Quarto = {
   <li><a href="#weight-parameterization" id="toc-weight-parameterization" class="nav-link" data-scroll-target="#weight-parameterization">Weight Parameterization</a></li>
   <li><a href="#value-function-approximator" id="toc-value-function-approximator" class="nav-link" data-scroll-target="#value-function-approximator">Value Function Approximator</a></li>
   <li><a href="#training-objective" id="toc-training-objective" class="nav-link" data-scroll-target="#training-objective">Training Objective</a></li>
+  <li><a href="#type-definitions" id="toc-type-definitions" class="nav-link" data-scroll-target="#type-definitions">Type Definitions</a></li>
   <li><a href="#algorithm" id="toc-algorithm" class="nav-link" data-scroll-target="#algorithm">Algorithm</a></li>
+  <li><a href="#subroutines" id="toc-subroutines" class="nav-link" data-scroll-target="#subroutines">Subroutines</a></li>
   <li><a href="#convergence" id="toc-convergence" class="nav-link" data-scroll-target="#convergence">Convergence</a></li>
   </ul></li>
   </ul>
@@ -253,35 +255,318 @@ P_\theta(a = 1 | s) = \frac{1}{1 + \exp(v_{\theta_0}(s) - v_{\theta_1}(s))}
 \mathcal{L}(\theta) = \mathbb{E}_s\left[ \sum_{a \in \{0,1\}} \left( v_{\theta_a}(s) - u(s, a) - \delta \bar{V}_\theta(s'_a) \right)^2 \right]
 \]</span> where <span class="math inline">\(s'_a = (1 - \gamma)s + a\)</span> is the next state under action <span class="math inline">\(a\)</span>.</p>
 </section>
+<section id="type-definitions" class="level3">
+<h3 class="anchored" data-anchor-id="type-definitions">Type Definitions</h3>
+<pre><code>TYPE DEFINITIONS
+────────────────
+Scalar      = Float                      # Single real number
+Vector[n]   = Array[Float, n]            # 1D array of n floats
+Matrix[m,n] = Array[Float, m, n]         # 2D array of shape (m, n)
+Action      = Int ∈ {0, 1}               # Binary action
+Network     = MonotonicNeuralNetwork     # Neural network with non-negative weights</code></pre>
+</section>
 <section id="algorithm" class="level3">
 <h3 class="anchored" data-anchor-id="algorithm">Algorithm</h3>
-<p><strong>Input:</strong></p>
-<ul>
-<li>Model parameters: <span class="math inline">\(\beta\)</span>, <span class="math inline">\(\gamma\)</span>, <span class="math inline">\(\delta\)</span></li>
-<li>State bounds: <span class="math inline">\([s_{\min}, s_{\max}]\)</span></li>
-<li>Network architecture: hidden layer sizes</li>
-<li>Training parameters: learning rate <span class="math inline">\(\alpha\)</span>, batch size <span class="math inline">\(N\)</span>, tolerance <span class="math inline">\(\epsilon\)</span>, max iterations <span class="math inline">\(K\)</span></li>
-</ul>
-<p><strong>Procedure:</strong></p>
-<ol type="1">
-<li><p><strong>Initialize</strong> neural networks <span class="math inline">\(v_{\theta_0}\)</span>, <span class="math inline">\(v_{\theta_1}\)</span> with random weights</p></li>
-<li><p><strong>For</strong> <span class="math inline">\(k = 1, 2, \ldots, K\)</span>:</p>
-<ol type="a">
-<li><p><strong>Sample</strong> batch of states: <span class="math inline">\(\{s_i\}_{i=1}^N \sim \text{Uniform}[s_{\min}, s_{\max}]\)</span></p></li>
-<li><p><strong>Compute next states</strong> for each action: <span class="math display">\[s'_{i,a} = (1 - \gamma) s_i + a, \quad a \in \{0, 1\}\]</span></p></li>
-<li><p><strong>Compute target values</strong> (with frozen network weights): <span class="math display">\[\hat{v}_{i,a} = u(s_i, a) + \delta \bar{V}_{\theta^{(k-1)}}(s'_{i,a})\]</span></p></li>
-<li><p><strong>Compute Bellman residual loss</strong>: <span class="math display">\[\mathcal{L}^{(k)} = \frac{1}{N} \sum_{i=1}^N \sum_{a \in \{0,1\}} \left( v_{\theta_a}(s_i) - \hat{v}_{i,a} \right)^2\]</span></p></li>
-<li><p><strong>Update weights</strong> via gradient descent: <span class="math display">\[\theta^{(k)} \leftarrow \theta^{(k-1)} - \alpha \nabla_\theta \mathcal{L}^{(k)}\]</span></p></li>
-<li><p><strong>Check convergence</strong>: If <span class="math inline">\(\sqrt{\mathcal{L}^{(k)}} &lt; \epsilon\)</span>, stop</p></li>
-</ol></li>
-<li><p><strong>Return</strong> trained networks <span class="math inline">\(v_{\theta_0}\)</span>, <span class="math inline">\(v_{\theta_1}\)</span></p></li>
-</ol>
-<p><strong>Output:</strong></p>
-<ul>
-<li>Choice-specific value functions: <span class="math inline">\(v(s, 0) = v_{\theta_0}(s)\)</span>, <span class="math inline">\(v(s, 1) = v_{\theta_1}(s)\)</span></li>
-<li>Integrated value function: <span class="math inline">\(\bar{V}(s) = \log(\exp(v_{\theta_0}(s)) + \exp(v_{\theta_1}(s)))\)</span></li>
-<li>Choice probabilities: <span class="math inline">\(P(a=1|s) = \sigma(v_{\theta_1}(s) - v_{\theta_0}(s))\)</span></li>
-</ul>
+<pre><code>ALGORITHM: SOLVE_VALUE_FUNCTION
+───────────────────────────────
+INPUT:
+  β            : Scalar              # Reward coefficient
+  γ            : Scalar              # State decay rate
+  δ            : Scalar              # Discount factor
+  s_min        : Scalar              # Minimum state
+  s_max        : Scalar              # Maximum state
+  hidden_sizes : List[Int]           # Hidden layer sizes
+  α            : Scalar              # Learning rate
+  N            : Int                 # Batch size
+  ε            : Scalar              # Convergence tolerance
+  K            : Int                 # Maximum iterations
+
+OUTPUT:
+  v₀_net       : Network             # Trained network for action 0
+  v₁_net       : Network             # Trained network for action 1
+
+PROCEDURE:
+  v₀_net : Network, v₁_net : Network ← INITIALIZE_NETWORKS(hidden_sizes)
+  
+  FOR k : Int = 1 TO K:
+    s_batch : Vector[N] ← SAMPLE_STATES(N, s_min, s_max)
+    
+    v₀_pred : Vector[N] ← EVALUATE_NETWORK(v₀_net, s_batch)
+    v₁_pred : Vector[N] ← EVALUATE_NETWORK(v₁_net, s_batch)
+    
+    target₀ : Vector[N], target₁ : Vector[N] ← COMPUTE_BELLMAN_TARGETS(
+      v₀_net, v₁_net, s_batch, β, γ, δ, s_min, s_max
+    )
+    
+    loss : Scalar ← COMPUTE_BELLMAN_LOSS(v₀_pred, v₁_pred, target₀, target₁)
+    
+    UPDATE_NETWORK_WEIGHTS(v₀_net, v₁_net, loss, α)
+    
+    IF CHECK_CONVERGENCE(loss, ε):
+      RETURN (v₀_net, v₁_net)
+  
+  RETURN (v₀_net, v₁_net)</code></pre>
+</section>
+<section id="subroutines" class="level3">
+<h3 class="anchored" data-anchor-id="subroutines">Subroutines</h3>
+<pre><code>SUBROUTINE: INITIALIZE_NETWORKS
+───────────────────────────────
+INPUT:
+  hidden_sizes : List[Int]           # Hidden layer sizes
+OUTPUT:
+  v₀_net : Network                   # Network for action 0
+  v₁_net : Network                   # Network for action 1
+
+  v₀_net : Network ← BUILD_MONOTONIC_NETWORK(hidden_sizes)
+  v₁_net : Network ← BUILD_MONOTONIC_NETWORK(hidden_sizes)
+  RETURN (v₀_net, v₁_net)</code></pre>
+<pre><code>SUBROUTINE: BUILD_MONOTONIC_NETWORK
+───────────────────────────────────
+INPUT:
+  hidden_sizes : List[Int]           # Hidden layer sizes
+OUTPUT:
+  network : Network                  # Monotonic neural network
+
+  layers : List[Layer] ← empty list
+  in_features : Int ← 1
+  
+  FOR i : Int = 0 TO length(hidden_sizes) - 1:
+    out_features : Int ← hidden_sizes[i]
+    
+    # Create monotonic linear layer
+    W_raw : Matrix[out_features, in_features] ← random_normal(0, 0.1)
+    b : Vector[out_features] ← zeros(out_features)
+    layers.append(MonotonicLinear(W_raw, b))
+    
+    # Add softplus activation
+    layers.append(SoftplusActivation())
+    
+    in_features ← out_features
+  
+  # Output layer (no activation)
+  W_raw_out : Matrix[1, in_features] ← random_normal(0, 0.1)
+  b_out : Vector[1] ← zeros(1)
+  layers.append(MonotonicLinear(W_raw_out, b_out))
+  
+  RETURN Network(layers)</code></pre>
+<pre><code>SUBROUTINE: APPLY_MONOTONIC_LINEAR
+──────────────────────────────────
+INPUT:
+  W_raw : Matrix[m, n]               # Unconstrained weight parameters
+  b     : Vector[m]                  # Bias vector
+  x     : Vector[n]                  # Input vector
+OUTPUT:
+  y     : Vector[m]                  # Output vector
+
+  # Enforce non-negative weights via softplus
+  W : Matrix[m, n] ← log(1 + exp(W_raw))
+  
+  # Linear transformation
+  y : Vector[m] ← W @ x + b
+  RETURN y</code></pre>
+<pre><code>SUBROUTINE: APPLY_SOFTPLUS
+──────────────────────────
+INPUT:
+  x : Vector[n]                      # Input vector
+OUTPUT:
+  y : Vector[n]                      # Output vector
+
+  FOR i : Int = 0 TO n - 1:
+    y[i] : Scalar ← log(1 + exp(x[i]))
+  RETURN y</code></pre>
+<pre><code>SUBROUTINE: EVALUATE_NETWORK
+────────────────────────────
+INPUT:
+  network : Network                  # Monotonic neural network
+  s       : Vector[N]                # Input states
+OUTPUT:
+  values  : Vector[N]                # Output values
+
+  x : Matrix[N, 1] ← reshape(s, (N, 1))
+  
+  FOR layer IN network.layers:
+    IF layer IS MonotonicLinear:
+      x ← APPLY_MONOTONIC_LINEAR(layer.W_raw, layer.b, x)
+    ELSE IF layer IS SoftplusActivation:
+      x ← APPLY_SOFTPLUS(x)
+  
+  values : Vector[N] ← reshape(x, (N,))
+  RETURN values</code></pre>
+<pre><code>SUBROUTINE: SAMPLE_STATES
+─────────────────────────
+INPUT:
+  N     : Int                        # Number of samples
+  s_min : Scalar                     # Minimum state
+  s_max : Scalar                     # Maximum state
+OUTPUT:
+  s     : Vector[N]                  # Sampled states
+
+  FOR i : Int = 0 TO N - 1:
+    u : Scalar ← random_uniform(0, 1)
+    s[i] : Scalar ← s_min + u * (s_max - s_min)
+  RETURN s</code></pre>
+<pre><code>SUBROUTINE: COMPUTE_REWARD
+──────────────────────────
+INPUT:
+  s      : Vector[N]                 # States
+  action : Action                    # Action (0 or 1)
+  β      : Scalar                    # Reward coefficient
+OUTPUT:
+  r      : Vector[N]                 # Rewards
+
+  FOR i : Int = 0 TO N - 1:
+    r[i] : Scalar ← β * log(1 + s[i]) - action
+  RETURN r</code></pre>
+<pre><code>SUBROUTINE: COMPUTE_NEXT_STATE
+──────────────────────────────
+INPUT:
+  s      : Vector[N]                 # Current states
+  action : Action                    # Action (0 or 1)
+  γ      : Scalar                    # Decay rate
+OUTPUT:
+  s_next : Vector[N]                 # Next states
+
+  FOR i : Int = 0 TO N - 1:
+    s_next[i] : Scalar ← (1 - γ) * s[i] + action
+  RETURN s_next</code></pre>
+<pre><code>SUBROUTINE: CLAMP_STATES
+────────────────────────
+INPUT:
+  s     : Vector[N]                  # States
+  s_min : Scalar                     # Minimum bound
+  s_max : Scalar                     # Maximum bound
+OUTPUT:
+  s_clamped : Vector[N]              # Clamped states
+
+  FOR i : Int = 0 TO N - 1:
+    IF s[i] &lt; s_min:
+      s_clamped[i] : Scalar ← s_min
+    ELSE IF s[i] &gt; s_max:
+      s_clamped[i] : Scalar ← s_max
+    ELSE:
+      s_clamped[i] : Scalar ← s[i]
+  RETURN s_clamped</code></pre>
+<pre><code>SUBROUTINE: COMPUTE_INTEGRATED_VALUE
+────────────────────────────────────
+INPUT:
+  v₀_net : Network                   # Network for action 0
+  v₁_net : Network                   # Network for action 1
+  s      : Vector[N]                 # States
+OUTPUT:
+  V_bar  : Vector[N]                 # Integrated value
+
+  v₀ : Vector[N] ← EVALUATE_NETWORK(v₀_net, s)
+  v₁ : Vector[N] ← EVALUATE_NETWORK(v₁_net, s)
+  
+  FOR i : Int = 0 TO N - 1:
+    v_max : Scalar ← max(v₀[i], v₁[i])
+    V_bar[i] : Scalar ← v_max + log(exp(v₀[i] - v_max) + exp(v₁[i] - v_max))
+  RETURN V_bar</code></pre>
+<pre><code>SUBROUTINE: COMPUTE_BELLMAN_TARGETS
+───────────────────────────────────
+INPUT:
+  v₀_net : Network                   # Network for action 0
+  v₁_net : Network                   # Network for action 1
+  s      : Vector[N]                 # Current states
+  β      : Scalar                    # Reward coefficient
+  γ      : Scalar                    # Decay rate
+  δ      : Scalar                    # Discount factor
+  s_min  : Scalar                    # Minimum state bound
+  s_max  : Scalar                    # Maximum state bound
+OUTPUT:
+  target₀ : Vector[N]                # Target for action 0
+  target₁ : Vector[N]                # Target for action 1
+
+  # Compute targets for action 0
+  r₀ : Vector[N] ← COMPUTE_REWARD(s, action=0, β)
+  s_next₀ : Vector[N] ← COMPUTE_NEXT_STATE(s, action=0, γ)
+  s_next₀ ← CLAMP_STATES(s_next₀, s_min, s_max)
+  V_next₀ : Vector[N] ← COMPUTE_INTEGRATED_VALUE(v₀_net, v₁_net, s_next₀)
+  
+  FOR i : Int = 0 TO N - 1:
+    target₀[i] : Scalar ← r₀[i] + δ * V_next₀[i]
+  
+  # Compute targets for action 1
+  r₁ : Vector[N] ← COMPUTE_REWARD(s, action=1, β)
+  s_next₁ : Vector[N] ← COMPUTE_NEXT_STATE(s, action=1, γ)
+  s_next₁ ← CLAMP_STATES(s_next₁, s_min, s_max)
+  V_next₁ : Vector[N] ← COMPUTE_INTEGRATED_VALUE(v₀_net, v₁_net, s_next₁)
+  
+  FOR i : Int = 0 TO N - 1:
+    target₁[i] : Scalar ← r₁[i] + δ * V_next₁[i]
+  
+  RETURN (target₀, target₁)</code></pre>
+<pre><code>SUBROUTINE: COMPUTE_BELLMAN_LOSS
+────────────────────────────────
+INPUT:
+  v₀_pred : Vector[N]                # Predicted values for action 0
+  v₁_pred : Vector[N]                # Predicted values for action 1
+  target₀ : Vector[N]                # Target values for action 0
+  target₁ : Vector[N]                # Target values for action 1
+OUTPUT:
+  loss    : Scalar                   # Mean squared Bellman residual
+
+  sum_sq : Scalar ← 0.0
+  
+  FOR i : Int = 0 TO N - 1:
+    error₀ : Scalar ← v₀_pred[i] - target₀[i]
+    error₁ : Scalar ← v₁_pred[i] - target₁[i]
+    sum_sq ← sum_sq + error₀ * error₀ + error₁ * error₁
+  
+  loss : Scalar ← sum_sq / (2 * N)
+  RETURN loss</code></pre>
+<pre><code>SUBROUTINE: UPDATE_NETWORK_WEIGHTS
+──────────────────────────────────
+INPUT:
+  v₀_net : Network                   # Network for action 0
+  v₁_net : Network                   # Network for action 1
+  loss   : Scalar                    # Loss value
+  α      : Scalar                    # Learning rate
+OUTPUT:
+  (none, updates networks in place)
+
+  # Compute gradients via backpropagation
+  grad₀ : List[Matrix] ← BACKPROPAGATE(v₀_net, loss)
+  grad₁ : List[Matrix] ← BACKPROPAGATE(v₁_net, loss)
+  
+  # Update weights for network 0
+  FOR j : Int = 0 TO length(v₀_net.layers) - 1:
+    IF v₀_net.layers[j] IS MonotonicLinear:
+      v₀_net.layers[j].W_raw ← v₀_net.layers[j].W_raw - α * grad₀[j].W
+      v₀_net.layers[j].b ← v₀_net.layers[j].b - α * grad₀[j].b
+  
+  # Update weights for network 1
+  FOR j : Int = 0 TO length(v₁_net.layers) - 1:
+    IF v₁_net.layers[j] IS MonotonicLinear:
+      v₁_net.layers[j].W_raw ← v₁_net.layers[j].W_raw - α * grad₁[j].W
+      v₁_net.layers[j].b ← v₁_net.layers[j].b - α * grad₁[j].b</code></pre>
+<pre><code>SUBROUTINE: CHECK_CONVERGENCE
+─────────────────────────────
+INPUT:
+  loss : Scalar                      # Current loss
+  ε    : Scalar                      # Tolerance
+OUTPUT:
+  converged : Bool                   # True if converged
+
+  rmse : Scalar ← sqrt(loss)
+  converged : Bool ← (rmse &lt; ε)
+  RETURN converged</code></pre>
+<pre><code>SUBROUTINE: COMPUTE_CHOICE_PROBABILITY
+──────────────────────────────────────
+INPUT:
+  v₀_net : Network                   # Network for action 0
+  v₁_net : Network                   # Network for action 1
+  s      : Vector[N]                 # States
+OUTPUT:
+  prob   : Vector[N]                 # P(a=1|s)
+
+  v₀ : Vector[N] ← EVALUATE_NETWORK(v₀_net, s)
+  v₁ : Vector[N] ← EVALUATE_NETWORK(v₁_net, s)
+  
+  FOR i : Int = 0 TO N - 1:
+    diff : Scalar ← v₁[i] - v₀[i]
+    prob[i] : Scalar ← 1 / (1 + exp(-diff))
+  RETURN prob</code></pre>
 </section>
 <section id="convergence" class="level3">
 <h3 class="anchored" data-anchor-id="convergence">Convergence</h3>

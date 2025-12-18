@@ -165,44 +165,366 @@ $$
 $$
 where $s'_a = (1 - \gamma)s + a$ is the next state under action $a$.
 
+### Type Definitions
+
+```
+TYPE DEFINITIONS
+────────────────
+Scalar      = Float                      # Single real number
+Vector[n]   = Array[Float, n]            # 1D array of n floats
+Matrix[m,n] = Array[Float, m, n]         # 2D array of shape (m, n)
+Action      = Int ∈ {0, 1}               # Binary action
+Network     = MonotonicNeuralNetwork     # Neural network with non-negative weights
+```
+
 ### Algorithm
 
-**Input:**
+```
+ALGORITHM: SOLVE_VALUE_FUNCTION
+───────────────────────────────
+INPUT:
+  β            : Scalar              # Reward coefficient
+  γ            : Scalar              # State decay rate
+  δ            : Scalar              # Discount factor
+  s_min        : Scalar              # Minimum state
+  s_max        : Scalar              # Maximum state
+  hidden_sizes : List[Int]           # Hidden layer sizes
+  α            : Scalar              # Learning rate
+  N            : Int                 # Batch size
+  ε            : Scalar              # Convergence tolerance
+  K            : Int                 # Maximum iterations
 
-- Model parameters: $\beta$, $\gamma$, $\delta$
-- State bounds: $[s_{\min}, s_{\max}]$
-- Network architecture: hidden layer sizes
-- Training parameters: learning rate $\alpha$, batch size $N$, tolerance $\epsilon$, max iterations $K$
+OUTPUT:
+  v₀_net       : Network             # Trained network for action 0
+  v₁_net       : Network             # Trained network for action 1
 
-**Procedure:**
+PROCEDURE:
+  v₀_net : Network, v₁_net : Network ← INITIALIZE_NETWORKS(hidden_sizes)
+  
+  FOR k : Int = 1 TO K:
+    s_batch : Vector[N] ← SAMPLE_STATES(N, s_min, s_max)
+    
+    v₀_pred : Vector[N] ← EVALUATE_NETWORK(v₀_net, s_batch)
+    v₁_pred : Vector[N] ← EVALUATE_NETWORK(v₁_net, s_batch)
+    
+    target₀ : Vector[N], target₁ : Vector[N] ← COMPUTE_BELLMAN_TARGETS(
+      v₀_net, v₁_net, s_batch, β, γ, δ, s_min, s_max
+    )
+    
+    loss : Scalar ← COMPUTE_BELLMAN_LOSS(v₀_pred, v₁_pred, target₀, target₁)
+    
+    UPDATE_NETWORK_WEIGHTS(v₀_net, v₁_net, loss, α)
+    
+    IF CHECK_CONVERGENCE(loss, ε):
+      RETURN (v₀_net, v₁_net)
+  
+  RETURN (v₀_net, v₁_net)
+```
 
-1. **Initialize** neural networks $v_{\theta_0}$, $v_{\theta_1}$ with random weights
+### Subroutines
 
-2. **For** $k = 1, 2, \ldots, K$:
+```
+SUBROUTINE: INITIALIZE_NETWORKS
+───────────────────────────────
+INPUT:
+  hidden_sizes : List[Int]           # Hidden layer sizes
+OUTPUT:
+  v₀_net : Network                   # Network for action 0
+  v₁_net : Network                   # Network for action 1
 
-   a. **Sample** batch of states: $\{s_i\}_{i=1}^N \sim \text{Uniform}[s_{\min}, s_{\max}]$
-   
-   b. **Compute next states** for each action:
-   $$s'_{i,a} = (1 - \gamma) s_i + a, \quad a \in \{0, 1\}$$
-   
-   c. **Compute target values** (with frozen network weights):
-   $$\hat{v}_{i,a} = u(s_i, a) + \delta \bar{V}_{\theta^{(k-1)}}(s'_{i,a})$$
-   
-   d. **Compute Bellman residual loss**:
-   $$\mathcal{L}^{(k)} = \frac{1}{N} \sum_{i=1}^N \sum_{a \in \{0,1\}} \left( v_{\theta_a}(s_i) - \hat{v}_{i,a} \right)^2$$
-   
-   e. **Update weights** via gradient descent:
-   $$\theta^{(k)} \leftarrow \theta^{(k-1)} - \alpha \nabla_\theta \mathcal{L}^{(k)}$$
-   
-   f. **Check convergence**: If $\sqrt{\mathcal{L}^{(k)}} < \epsilon$, stop
+  v₀_net : Network ← BUILD_MONOTONIC_NETWORK(hidden_sizes)
+  v₁_net : Network ← BUILD_MONOTONIC_NETWORK(hidden_sizes)
+  RETURN (v₀_net, v₁_net)
+```
 
-3. **Return** trained networks $v_{\theta_0}$, $v_{\theta_1}$
+```
+SUBROUTINE: BUILD_MONOTONIC_NETWORK
+───────────────────────────────────
+INPUT:
+  hidden_sizes : List[Int]           # Hidden layer sizes
+OUTPUT:
+  network : Network                  # Monotonic neural network
 
-**Output:**
+  layers : List[Layer] ← empty list
+  in_features : Int ← 1
+  
+  FOR i : Int = 0 TO length(hidden_sizes) - 1:
+    out_features : Int ← hidden_sizes[i]
+    
+    # Create monotonic linear layer
+    W_raw : Matrix[out_features, in_features] ← random_normal(0, 0.1)
+    b : Vector[out_features] ← zeros(out_features)
+    layers.append(MonotonicLinear(W_raw, b))
+    
+    # Add softplus activation
+    layers.append(SoftplusActivation())
+    
+    in_features ← out_features
+  
+  # Output layer (no activation)
+  W_raw_out : Matrix[1, in_features] ← random_normal(0, 0.1)
+  b_out : Vector[1] ← zeros(1)
+  layers.append(MonotonicLinear(W_raw_out, b_out))
+  
+  RETURN Network(layers)
+```
 
-- Choice-specific value functions: $v(s, 0) = v_{\theta_0}(s)$, $v(s, 1) = v_{\theta_1}(s)$
-- Integrated value function: $\bar{V}(s) = \log(\exp(v_{\theta_0}(s)) + \exp(v_{\theta_1}(s)))$
-- Choice probabilities: $P(a=1|s) = \sigma(v_{\theta_1}(s) - v_{\theta_0}(s))$
+```
+SUBROUTINE: APPLY_MONOTONIC_LINEAR
+──────────────────────────────────
+INPUT:
+  W_raw : Matrix[m, n]               # Unconstrained weight parameters
+  b     : Vector[m]                  # Bias vector
+  x     : Vector[n]                  # Input vector
+OUTPUT:
+  y     : Vector[m]                  # Output vector
+
+  # Enforce non-negative weights via softplus
+  W : Matrix[m, n] ← log(1 + exp(W_raw))
+  
+  # Linear transformation
+  y : Vector[m] ← W @ x + b
+  RETURN y
+```
+
+```
+SUBROUTINE: APPLY_SOFTPLUS
+──────────────────────────
+INPUT:
+  x : Vector[n]                      # Input vector
+OUTPUT:
+  y : Vector[n]                      # Output vector
+
+  FOR i : Int = 0 TO n - 1:
+    y[i] : Scalar ← log(1 + exp(x[i]))
+  RETURN y
+```
+
+```
+SUBROUTINE: EVALUATE_NETWORK
+────────────────────────────
+INPUT:
+  network : Network                  # Monotonic neural network
+  s       : Vector[N]                # Input states
+OUTPUT:
+  values  : Vector[N]                # Output values
+
+  x : Matrix[N, 1] ← reshape(s, (N, 1))
+  
+  FOR layer IN network.layers:
+    IF layer IS MonotonicLinear:
+      x ← APPLY_MONOTONIC_LINEAR(layer.W_raw, layer.b, x)
+    ELSE IF layer IS SoftplusActivation:
+      x ← APPLY_SOFTPLUS(x)
+  
+  values : Vector[N] ← reshape(x, (N,))
+  RETURN values
+```
+
+```
+SUBROUTINE: SAMPLE_STATES
+─────────────────────────
+INPUT:
+  N     : Int                        # Number of samples
+  s_min : Scalar                     # Minimum state
+  s_max : Scalar                     # Maximum state
+OUTPUT:
+  s     : Vector[N]                  # Sampled states
+
+  FOR i : Int = 0 TO N - 1:
+    u : Scalar ← random_uniform(0, 1)
+    s[i] : Scalar ← s_min + u * (s_max - s_min)
+  RETURN s
+```
+
+```
+SUBROUTINE: COMPUTE_REWARD
+──────────────────────────
+INPUT:
+  s      : Vector[N]                 # States
+  action : Action                    # Action (0 or 1)
+  β      : Scalar                    # Reward coefficient
+OUTPUT:
+  r      : Vector[N]                 # Rewards
+
+  FOR i : Int = 0 TO N - 1:
+    r[i] : Scalar ← β * log(1 + s[i]) - action
+  RETURN r
+```
+
+```
+SUBROUTINE: COMPUTE_NEXT_STATE
+──────────────────────────────
+INPUT:
+  s      : Vector[N]                 # Current states
+  action : Action                    # Action (0 or 1)
+  γ      : Scalar                    # Decay rate
+OUTPUT:
+  s_next : Vector[N]                 # Next states
+
+  FOR i : Int = 0 TO N - 1:
+    s_next[i] : Scalar ← (1 - γ) * s[i] + action
+  RETURN s_next
+```
+
+```
+SUBROUTINE: CLAMP_STATES
+────────────────────────
+INPUT:
+  s     : Vector[N]                  # States
+  s_min : Scalar                     # Minimum bound
+  s_max : Scalar                     # Maximum bound
+OUTPUT:
+  s_clamped : Vector[N]              # Clamped states
+
+  FOR i : Int = 0 TO N - 1:
+    IF s[i] < s_min:
+      s_clamped[i] : Scalar ← s_min
+    ELSE IF s[i] > s_max:
+      s_clamped[i] : Scalar ← s_max
+    ELSE:
+      s_clamped[i] : Scalar ← s[i]
+  RETURN s_clamped
+```
+
+```
+SUBROUTINE: COMPUTE_INTEGRATED_VALUE
+────────────────────────────────────
+INPUT:
+  v₀_net : Network                   # Network for action 0
+  v₁_net : Network                   # Network for action 1
+  s      : Vector[N]                 # States
+OUTPUT:
+  V_bar  : Vector[N]                 # Integrated value
+
+  v₀ : Vector[N] ← EVALUATE_NETWORK(v₀_net, s)
+  v₁ : Vector[N] ← EVALUATE_NETWORK(v₁_net, s)
+  
+  FOR i : Int = 0 TO N - 1:
+    v_max : Scalar ← max(v₀[i], v₁[i])
+    V_bar[i] : Scalar ← v_max + log(exp(v₀[i] - v_max) + exp(v₁[i] - v_max))
+  RETURN V_bar
+```
+
+```
+SUBROUTINE: COMPUTE_BELLMAN_TARGETS
+───────────────────────────────────
+INPUT:
+  v₀_net : Network                   # Network for action 0
+  v₁_net : Network                   # Network for action 1
+  s      : Vector[N]                 # Current states
+  β      : Scalar                    # Reward coefficient
+  γ      : Scalar                    # Decay rate
+  δ      : Scalar                    # Discount factor
+  s_min  : Scalar                    # Minimum state bound
+  s_max  : Scalar                    # Maximum state bound
+OUTPUT:
+  target₀ : Vector[N]                # Target for action 0
+  target₁ : Vector[N]                # Target for action 1
+
+  # Compute targets for action 0
+  r₀ : Vector[N] ← COMPUTE_REWARD(s, action=0, β)
+  s_next₀ : Vector[N] ← COMPUTE_NEXT_STATE(s, action=0, γ)
+  s_next₀ ← CLAMP_STATES(s_next₀, s_min, s_max)
+  V_next₀ : Vector[N] ← COMPUTE_INTEGRATED_VALUE(v₀_net, v₁_net, s_next₀)
+  
+  FOR i : Int = 0 TO N - 1:
+    target₀[i] : Scalar ← r₀[i] + δ * V_next₀[i]
+  
+  # Compute targets for action 1
+  r₁ : Vector[N] ← COMPUTE_REWARD(s, action=1, β)
+  s_next₁ : Vector[N] ← COMPUTE_NEXT_STATE(s, action=1, γ)
+  s_next₁ ← CLAMP_STATES(s_next₁, s_min, s_max)
+  V_next₁ : Vector[N] ← COMPUTE_INTEGRATED_VALUE(v₀_net, v₁_net, s_next₁)
+  
+  FOR i : Int = 0 TO N - 1:
+    target₁[i] : Scalar ← r₁[i] + δ * V_next₁[i]
+  
+  RETURN (target₀, target₁)
+```
+
+```
+SUBROUTINE: COMPUTE_BELLMAN_LOSS
+────────────────────────────────
+INPUT:
+  v₀_pred : Vector[N]                # Predicted values for action 0
+  v₁_pred : Vector[N]                # Predicted values for action 1
+  target₀ : Vector[N]                # Target values for action 0
+  target₁ : Vector[N]                # Target values for action 1
+OUTPUT:
+  loss    : Scalar                   # Mean squared Bellman residual
+
+  sum_sq : Scalar ← 0.0
+  
+  FOR i : Int = 0 TO N - 1:
+    error₀ : Scalar ← v₀_pred[i] - target₀[i]
+    error₁ : Scalar ← v₁_pred[i] - target₁[i]
+    sum_sq ← sum_sq + error₀ * error₀ + error₁ * error₁
+  
+  loss : Scalar ← sum_sq / (2 * N)
+  RETURN loss
+```
+
+```
+SUBROUTINE: UPDATE_NETWORK_WEIGHTS
+──────────────────────────────────
+INPUT:
+  v₀_net : Network                   # Network for action 0
+  v₁_net : Network                   # Network for action 1
+  loss   : Scalar                    # Loss value
+  α      : Scalar                    # Learning rate
+OUTPUT:
+  (none, updates networks in place)
+
+  # Compute gradients via backpropagation
+  grad₀ : List[Matrix] ← BACKPROPAGATE(v₀_net, loss)
+  grad₁ : List[Matrix] ← BACKPROPAGATE(v₁_net, loss)
+  
+  # Update weights for network 0
+  FOR j : Int = 0 TO length(v₀_net.layers) - 1:
+    IF v₀_net.layers[j] IS MonotonicLinear:
+      v₀_net.layers[j].W_raw ← v₀_net.layers[j].W_raw - α * grad₀[j].W
+      v₀_net.layers[j].b ← v₀_net.layers[j].b - α * grad₀[j].b
+  
+  # Update weights for network 1
+  FOR j : Int = 0 TO length(v₁_net.layers) - 1:
+    IF v₁_net.layers[j] IS MonotonicLinear:
+      v₁_net.layers[j].W_raw ← v₁_net.layers[j].W_raw - α * grad₁[j].W
+      v₁_net.layers[j].b ← v₁_net.layers[j].b - α * grad₁[j].b
+```
+
+```
+SUBROUTINE: CHECK_CONVERGENCE
+─────────────────────────────
+INPUT:
+  loss : Scalar                      # Current loss
+  ε    : Scalar                      # Tolerance
+OUTPUT:
+  converged : Bool                   # True if converged
+
+  rmse : Scalar ← sqrt(loss)
+  converged : Bool ← (rmse < ε)
+  RETURN converged
+```
+
+```
+SUBROUTINE: COMPUTE_CHOICE_PROBABILITY
+──────────────────────────────────────
+INPUT:
+  v₀_net : Network                   # Network for action 0
+  v₁_net : Network                   # Network for action 1
+  s      : Vector[N]                 # States
+OUTPUT:
+  prob   : Vector[N]                 # P(a=1|s)
+
+  v₀ : Vector[N] ← EVALUATE_NETWORK(v₀_net, s)
+  v₁ : Vector[N] ← EVALUATE_NETWORK(v₁_net, s)
+  
+  FOR i : Int = 0 TO N - 1:
+    diff : Scalar ← v₁[i] - v₀[i]
+    prob[i] : Scalar ← 1 / (1 + exp(-diff))
+  RETURN prob
+```
 
 ### Convergence
 
