@@ -119,18 +119,19 @@ v_\theta(s) = W_L \cdot \sigma\left( W_{L-1} \cdot \sigma\left( \cdots \sigma(W_
 $$
 where $W_\ell \geq 0$ for all layers and $\sigma$ is a monotonically increasing activation function.
 
-### Softplus Activation
+### Tanh Activation
 
-We use the **softplus** activation function:
+We use the **tanh** (hyperbolic tangent) activation function:
 $$
-\sigma(x) = \log(1 + e^x)
+\sigma(x) = \tanh(x) = \frac{e^x - e^{-x}}{e^x + e^{-x}}
 $$
 
 Properties:
 
-- **Monotonically increasing**: $\sigma'(x) = \frac{e^x}{1 + e^x} = \text{sigmoid}(x) > 0$
-- **Smooth approximation to ReLU**: $\sigma(x) \approx \max(0, x)$ for large $|x|$
-- **Differentiable everywhere** (unlike ReLU)
+- **Monotonically increasing**: $\sigma'(x) = 1 - \tanh^2(x) > 0$
+- **Bounded output**: $\sigma(x) \in (-1, 1)$ prevents explosive growth
+- **Zero-centered**: Allows both positive and negative intermediate representations
+- **Better gradient flow**: Bounded outputs help maintain stable gradients through deep networks
 
 ### Weight Parameterization
 
@@ -288,8 +289,8 @@ OUTPUT:
     b : Vector[out_features] ← zeros(out_features)
     layers.append(MonotonicLinear(W_raw, b))
     
-    # Add softplus activation
-    layers.append(SoftplusActivation())
+    # Add tanh activation (bounded, zero-centered)
+    layers.append(TanhActivation())
     
     in_features ← out_features
   
@@ -320,15 +321,15 @@ OUTPUT:
 ```
 
 ```
-SUBROUTINE: APPLY_SOFTPLUS
-──────────────────────────
+SUBROUTINE: APPLY_TANH
+──────────────────────
 INPUT:
   x : Vector[n]                      # Input vector
 OUTPUT:
   y : Vector[n]                      # Output vector
 
   FOR i : Int = 0 TO n - 1:
-    y[i] : Scalar ← log(1 + exp(x[i]))
+    y[i] : Scalar ← tanh(x[i])       # Bounded to (-1, 1)
   RETURN y
 ```
 
@@ -346,8 +347,8 @@ OUTPUT:
   FOR layer IN network.layers:
     IF layer IS MonotonicLinear:
       x ← APPLY_MONOTONIC_LINEAR(layer.W_raw, layer.b, x)
-    ELSE IF layer IS SoftplusActivation:
-      x ← APPLY_SOFTPLUS(x)
+    ELSE IF layer IS TanhActivation:
+      x ← APPLY_TANH(x)
   
   values : Vector[N] ← reshape(x, (N,))
   RETURN values
@@ -586,20 +587,20 @@ print("Modules loaded successfully")
 
 ```{python}
 # Model parameters
-beta = 0.1      # Reward coefficient (diminishing returns)
+beta = 0.5      # Utility coefficient in reward: β * log(1+s)
 gamma = 0.1     # State decay rate
 delta = 0.95    # Discount factor
 
 # State space bounds
 s_min = 0.0
-s_max = 10.0
+s_max = 20.0
 
 # Neural network architecture
-hidden_sizes = [32, 32]
+hidden_sizes = [64, 64]
 
 # Training parameters
 learning_rate = 0.1     # Higher LR works well with target networks
-batch_size = 128
+batch_size = 256
 tolerance = 0.01        # Relaxed tolerance (achievable level)
 max_iterations = 20000  # More iterations for proper convergence
 target_update_freq = 10 # Target network update frequency
