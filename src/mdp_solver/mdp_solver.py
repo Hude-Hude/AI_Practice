@@ -189,6 +189,11 @@ def compute_bellman_targets(
     Implements COMPUTE_BELLMAN_TARGETS from pseudo code:
         target_a = r(s, a) + δ * V(s')
     
+    Parameters:
+        beta: utility coefficient in reward (β * log(1 + s))
+        gamma: depreciation rate
+        delta: discount factor (0 < δ < 1)
+    
     No clamping - unbounded state space. Networks must extrapolate.
     """
     # Compute targets for action 0 (no clamping - unbounded state space)
@@ -429,12 +434,14 @@ def solve_value_function(
         v1_pred: TensorVector = evaluate_network(v1_net, s_grid)
         
         # Targets computed from TARGET networks (stable, not moving)
-        target0: TensorVector
-        target1: TensorVector
-        target0, target1 = compute_bellman_targets(
-            v0_target, v1_target, s_grid,
-            beta, gamma, delta,
-        )
+        # Use no_grad to prevent gradient computation through target networks
+        with torch.no_grad():
+            target0: TensorVector
+            target1: TensorVector
+            target0, target1 = compute_bellman_targets(
+                v0_target, v1_target, s_grid,
+                beta, gamma, delta,
+            )
         
         # Compute loss
         loss: torch.Tensor = compute_bellman_loss(v0_pred, v1_pred, target0, target1)

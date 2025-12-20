@@ -70,17 +70,19 @@ class TestComputeBellmanTargets:
         assert target1.shape == (50,)
 
     def test_discount_zero(self) -> None:
-        """With delta=0, targets should equal rewards."""
+        """With delta=0 (discount factor), targets should equal rewards."""
         v0_net = build_monotonic_network([8])
         v1_net = build_monotonic_network([8])
         s = torch.tensor([0.0, 5.0, 10.0])
         beta = 2.0
         
+        # delta=0 means no discounting of future values
         target0, target1 = compute_bellman_targets(
             v0_net, v1_net, s,
             beta=beta, gamma=0.1, delta=0.0,
         )
         
+        # With delta=0: target = r + 0*V(s') = r
         expected0 = beta * torch.log(1 + s)  # action 0
         expected1 = beta * torch.log(1 + s) - 1  # action 1
         

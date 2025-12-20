@@ -295,8 +295,9 @@ class TestSolveValueFunction:
         torch.manual_seed(42)
         
         # With frequent target updates (like no target network)
+        # delta is the discount factor (should be < 1)
         _, _, losses_freq, _ = solve_value_function(
-            beta=1.0, gamma=0.1, delta=0.9,
+            beta=0.1, gamma=0.1, delta=0.95,
             s_min=0.0, s_max=10.0,
             hidden_sizes=[16, 16],
             learning_rate=0.05,
@@ -310,7 +311,7 @@ class TestSolveValueFunction:
         
         # With infrequent target updates (stable targets)
         _, _, losses_stable, _ = solve_value_function(
-            beta=1.0, gamma=0.1, delta=0.9,
+            beta=0.1, gamma=0.1, delta=0.95,
             s_min=0.0, s_max=10.0,
             hidden_sizes=[16, 16],
             learning_rate=0.05,
