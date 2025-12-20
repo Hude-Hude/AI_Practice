@@ -193,27 +193,41 @@ INPUT:
   N            : Int                 # Batch size
   ε            : Scalar              # Convergence tolerance
   K            : Int                 # Maximum iterations
+  T            : Int                 # Target network update frequency
 
 OUTPUT:
   v₀_net       : Network             # Trained network for action 0
   v₁_net       : Network             # Trained network for action 1
 
 PROCEDURE:
+  # Initialize policy networks (updated every iteration)
   v₀_net : Network, v₁_net : Network ← INITIALIZE_NETWORKS(hidden_sizes)
+  
+  # Initialize target networks (frozen copies, updated every T iterations)
+  v₀_target : Network ← COPY_NETWORK(v₀_net)
+  v₁_target : Network ← COPY_NETWORK(v₁_net)
   
   FOR k : Int = 1 TO K:
     s_batch : Vector[N] ← SAMPLE_STATES(N, s_min, s_max)
     
+    # Predictions from policy networks
     v₀_pred : Vector[N] ← EVALUATE_NETWORK(v₀_net, s_batch)
     v₁_pred : Vector[N] ← EVALUATE_NETWORK(v₁_net, s_batch)
     
+    # Targets computed from TARGET networks (stable, not moving)
     target₀ : Vector[N], target₁ : Vector[N] ← COMPUTE_BELLMAN_TARGETS(
-      v₀_net, v₁_net, s_batch, β, γ, δ
+      v₀_target, v₁_target, s_batch, β, γ, δ
     )
     
     loss : Scalar ← COMPUTE_BELLMAN_LOSS(v₀_pred, v₁_pred, target₀, target₁)
     
+    # Update policy networks
     UPDATE_NETWORK_WEIGHTS(v₀_net, v₁_net, loss, α)
+    
+    # Periodically sync target networks with policy networks
+    IF k MOD T = 0:
+      v₀_target ← COPY_NETWORK(v₀_net)
+      v₁_target ← COPY_NETWORK(v₁_net)
     
     IF CHECK_CONVERGENCE(loss, ε):
       RETURN (v₀_net, v₁_net)
@@ -235,6 +249,23 @@ OUTPUT:
   v₀_net : Network ← BUILD_MONOTONIC_NETWORK(hidden_sizes)
   v₁_net : Network ← BUILD_MONOTONIC_NETWORK(hidden_sizes)
   RETURN (v₀_net, v₁_net)
+```
+
+```
+SUBROUTINE: COPY_NETWORK
+────────────────────────
+INPUT:
+  source : Network                   # Network to copy from
+OUTPUT:
+  target : Network                   # Deep copy of source network
+
+  # Create a new network with identical architecture and weights
+  target : Network ← DEEP_COPY(source)
+  
+  # Freeze the target network (no gradient computation)
+  SET_REQUIRES_GRAD(target, false)
+  
+  RETURN target
 ```
 
 ```
@@ -542,6 +573,7 @@ from mdp_solver import (
     compute_choice_probability,
     evaluate_network,
     compute_integrated_value,
+    compute_bellman_targets,
 )
 
 print("Modules loaded successfully")
@@ -563,10 +595,10 @@ s_max = 10.0
 hidden_sizes = [32, 32]
 
 # Training parameters
-learning_rate = 0.01
+learning_rate = 0.001   # Reduced from 0.01 for stability with more iterations
 batch_size = 128
 tolerance = 1e-4
-max_iterations = 2000
+max_iterations = 10000  # Increased from 2000 for proper convergence
 
 print(f"Model: u(s,a) = {beta} * log(1+s) - a")
 print(f"Transition: s' = {1-gamma:.1f} * s + a")
@@ -686,6 +718,53 @@ plt.grid(True, alpha=0.3)
 plt.axhline(y=0, color='gray', linestyle='--', alpha=0.5)
 plt.tight_layout()
 plt.show()
+```
+
+#### Bellman Residuals
+
+```{python}
+#| fig-cap: "Bellman residual v(s,a) - target(s,a) across states. A well-converged solution should have near-zero residuals."
+
+# Compute Bellman targets at evaluation points
+with torch.no_grad():
+    target0, target1 = compute_bellman_targets(
+        v0_net, v1_net, s_eval,
+        beta=beta, gamma=gamma, delta=delta
+    )
+    target0_np = target0.numpy()
+    target1_np = target1.numpy()
+
+# Compute residuals
+residual0 = v0_values - target0_np
+residual1 = v1_values - target1_np
+
+# Plot
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+ax0 = axes[0]
+ax0.plot(s_np, residual0, 'b-', linewidth=1.5)
+ax0.axhline(y=0, color='gray', linestyle='--', alpha=0.5)
+ax0.set_xlabel('State s')
+ax0.set_ylabel('v(s,0) - target(s,0)')
+ax0.set_title('Bellman Residual: a=0 (No Investment)')
+ax0.grid(True, alpha=0.3)
+
+ax1 = axes[1]
+ax1.plot(s_np, residual1, 'r-', linewidth=1.5)
+ax1.axhline(y=0, color='gray', linestyle='--', alpha=0.5)
+ax1.set_xlabel('State s')
+ax1.set_ylabel('v(s,1) - target(s,1)')
+ax1.set_title('Bellman Residual: a=1 (Investment)')
+ax1.grid(True, alpha=0.3)
+
+plt.tight_layout()
+plt.show()
+
+# Print summary statistics
+print(f"Bellman Residual Summary:")
+print(f"  a=0: Mean = {np.mean(residual0):.6f}, Max |residual| = {np.max(np.abs(residual0)):.6f}")
+print(f"  a=1: Mean = {np.mean(residual1):.6f}, Max |residual| = {np.max(np.abs(residual1)):.6f}")
+print(f"  Combined RMSE = {np.sqrt(np.mean(residual0**2 + residual1**2) / 2):.6f}")
 ```
 
 ### Interpretation
