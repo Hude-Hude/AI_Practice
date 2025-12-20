@@ -18,7 +18,7 @@ from mdp_solver.mdp_solver import (
     TargetPair,
     # Neural network components
     MonotonicLinear,
-    SoftplusActivation,
+    TanhActivation,
     build_monotonic_network,
     evaluate_network,
     # Model primitives
@@ -52,7 +52,7 @@ __all__ = [
     "TargetPair",
     # Neural network components
     "MonotonicLinear",
-    "SoftplusActivation",
+    "TanhActivation",
     "build_monotonic_network",
     "evaluate_network",
     # Model primitives

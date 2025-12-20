@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 from mdp_solver import (
     MonotonicLinear,
-    SoftplusActivation,
+    TanhActivation,
     build_monotonic_network,
     evaluate_network,
 )
@@ -45,31 +45,39 @@ class TestMonotonicLinear:
         assert torch.all(diffs >= -1e-6)  # Allow small numerical errors
 
 
-class TestSoftplusActivation:
-    """Tests for SoftplusActivation."""
+class TestTanhActivation:
+    """Tests for TanhActivation."""
 
-    def test_output_positive(self) -> None:
-        """Softplus output should always be positive."""
-        activation = SoftplusActivation()
+    def test_output_bounded(self) -> None:
+        """Tanh output should be bounded in [-1, 1]."""
+        activation = TanhActivation()
         x = torch.randn(100) * 10  # Wide range of inputs
         y = activation(x)
-        assert torch.all(y > 0)
+        assert torch.all(y >= -1)
+        assert torch.all(y <= 1)
 
     def test_monotonicity(self) -> None:
-        """Softplus should be monotonically increasing."""
-        activation = SoftplusActivation()
+        """Tanh should be monotonically increasing."""
+        activation = TanhActivation()
         x = torch.linspace(-10, 10, 100)
         y = activation(x)
         diffs = torch.diff(y)
-        assert torch.all(diffs > 0)
+        assert torch.all(diffs >= 0)
 
     def test_formula(self) -> None:
-        """Should match log(1 + exp(x))."""
-        activation = SoftplusActivation()
+        """Should match tanh(x)."""
+        activation = TanhActivation()
         x = torch.tensor([0.0, 1.0, -1.0, 5.0])
         y = activation(x)
-        expected = torch.log(1 + torch.exp(x))
+        expected = torch.tanh(x)
         torch.testing.assert_close(y, expected)
+
+    def test_zero_centered(self) -> None:
+        """Tanh(0) should be 0."""
+        activation = TanhActivation()
+        x = torch.tensor([0.0])
+        y = activation(x)
+        assert y.item() == 0.0
 
 
 class TestBuildMonotonicNetwork:

@@ -65,17 +65,21 @@ class MonotonicLinear(nn.Module):
         return F.linear(x, weight, self.bias)
 
 
-class SoftplusActivation(nn.Module):
-    """Softplus activation function: y = log(1 + exp(x))."""
+class TanhActivation(nn.Module):
+    """Tanh activation function: y = tanh(x).
+    
+    Bounded to (-1, 1), zero-centered, better gradient flow than softplus.
+    """
 
     def forward(self, x: TensorVector) -> TensorVector:
-        return F.softplus(x)
+        return torch.tanh(x)
 
 
 def build_monotonic_network(hidden_sizes: HiddenSizes) -> nn.Sequential:
     """Build a monotonic neural network.
     
     Implements BUILD_MONOTONIC_NETWORK from pseudo code.
+    Uses Tanh activation (bounded, zero-centered) for better gradient flow.
     """
     layers: List[nn.Module] = []
     in_features: int = 1  # Single state input
@@ -83,7 +87,7 @@ def build_monotonic_network(hidden_sizes: HiddenSizes) -> nn.Sequential:
     for i in range(len(hidden_sizes)):
         out_features: int = hidden_sizes[i]
         layers.append(MonotonicLinear(in_features, out_features))
-        layers.append(SoftplusActivation())
+        layers.append(TanhActivation())
         in_features = out_features
     
     # Output layer (no activation)
