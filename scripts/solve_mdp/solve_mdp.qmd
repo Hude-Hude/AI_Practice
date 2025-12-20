@@ -207,16 +207,17 @@ PROCEDURE:
   v₀_target : Network ← COPY_NETWORK(v₀_net)
   v₁_target : Network ← COPY_NETWORK(v₁_net)
   
+  # Generate fixed state grid (same states used every iteration)
+  s_grid : Vector[N] ← GENERATE_STATE_GRID(N, s_min, s_max)
+  
   FOR k : Int = 1 TO K:
-    s_batch : Vector[N] ← SAMPLE_STATES(N, s_min, s_max)
-    
-    # Predictions from policy networks
-    v₀_pred : Vector[N] ← EVALUATE_NETWORK(v₀_net, s_batch)
-    v₁_pred : Vector[N] ← EVALUATE_NETWORK(v₁_net, s_batch)
+    # Predictions from policy networks (using fixed grid)
+    v₀_pred : Vector[N] ← EVALUATE_NETWORK(v₀_net, s_grid)
+    v₁_pred : Vector[N] ← EVALUATE_NETWORK(v₁_net, s_grid)
     
     # Targets computed from TARGET networks (stable, not moving)
     target₀ : Vector[N], target₁ : Vector[N] ← COMPUTE_BELLMAN_TARGETS(
-      v₀_target, v₁_target, s_batch, β, γ, δ
+      v₀_target, v₁_target, s_grid, β, γ, δ
     )
     
     loss : Scalar ← COMPUTE_BELLMAN_LOSS(v₀_pred, v₁_pred, target₀, target₁)
@@ -353,18 +354,20 @@ OUTPUT:
 ```
 
 ```
-SUBROUTINE: SAMPLE_STATES
-─────────────────────────
+SUBROUTINE: GENERATE_STATE_GRID
+───────────────────────────────
 INPUT:
-  N     : Int                        # Number of samples
+  N     : Int                        # Number of grid points
   s_min : Scalar                     # Minimum state
   s_max : Scalar                     # Maximum state
 OUTPUT:
-  s     : Vector[N]                  # Sampled states
+  s     : Vector[N]                  # Fixed state grid (evenly spaced)
 
+  # Generate evenly spaced points from s_min to s_max
+  step : Scalar ← (s_max - s_min) / (N - 1)
+  
   FOR i : Int = 0 TO N - 1:
-    u : Scalar ← random_uniform(0, 1)
-    s[i] : Scalar ← s_min + u * (s_max - s_min)
+    s[i] : Scalar ← s_min + i * step
   RETURN s
 ```
 
@@ -595,10 +598,11 @@ s_max = 10.0
 hidden_sizes = [32, 32]
 
 # Training parameters
-learning_rate = 0.001   # Reduced from 0.01 for stability with more iterations
+learning_rate = 0.1     # Higher LR works well with target networks
 batch_size = 128
-tolerance = 1e-4
-max_iterations = 10000  # Increased from 2000 for proper convergence
+tolerance = 0.01        # Relaxed tolerance (achievable level)
+max_iterations = 20000  # More iterations for proper convergence
+target_update_freq = 10 # Target network update frequency
 
 print(f"Model: u(s,a) = {beta} * log(1+s) - a")
 print(f"Transition: s' = {1-gamma:.1f} * s + a")
@@ -626,6 +630,7 @@ v0_net, v1_net, losses, n_iter = solve_value_function(
     batch_size=batch_size,
     tolerance=tolerance,
     max_iterations=max_iterations,
+    target_update_freq=target_update_freq,
 )
 
 print(f"Converged in {n_iter} iterations")
@@ -790,6 +795,7 @@ This section examines how the value functions change as we vary the reward coeff
 ```{python}
 #| label: comparative-statics-setup
 #| cache: true
+#| eval: false
 
 def solve_and_extract_values(beta_val):
     """Solve MDP and extract value functions and choice probabilities for given beta."""
@@ -836,6 +842,7 @@ cmap_red = mcolors.LinearSegmentedColormap.from_list('black_red', ['black', 'red
 
 ```{python}
 #| fig-cap: "Value functions v(s,a) as β varies from 0 to 2. Left: a=0 (black→blue). Right: a=1 (black→red)."
+#| eval: false
 
 fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
@@ -879,6 +886,7 @@ plt.show()
 
 ```{python}
 #| fig-cap: "Choice probabilities P(a|s) as β varies from 0 to 2. Left: P(a=0|s) (black→blue). Right: P(a=1|s) (black→red)."
+#| eval: false
 
 fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
@@ -923,6 +931,7 @@ plt.show()
 ### Summary (β)
 
 ```{python}
+#| eval: false
 print("Comparative Statics Summary: Effect of β on Value Functions")
 print("=" * 60)
 print(f"\nFixed parameters: γ={gamma}, δ={delta}")
@@ -941,6 +950,7 @@ This section examines how the value functions change as we vary the decay rate �
 ```{python}
 #| label: comparative-statics-gamma
 #| cache: true
+#| eval: false
 
 def solve_and_extract_values_gamma(gamma_val):
     """Solve MDP and extract value functions and choice probabilities for given gamma."""
@@ -983,6 +993,7 @@ print("Complete!")
 
 ```{python}
 #| fig-cap: "Value functions v(s,a) as γ varies from 0 to 0.1. Left: a=0 (black→blue). Right: a=1 (black→red)."
+#| eval: false
 
 fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
@@ -1026,6 +1037,7 @@ plt.show()
 
 ```{python}
 #| fig-cap: "Choice probabilities P(a|s) as γ varies from 0 to 0.1. Left: P(a=0|s) (black→blue). Right: P(a=1|s) (black→red)."
+#| eval: false
 
 fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
@@ -1070,6 +1082,7 @@ plt.show()
 ### Summary (γ)
 
 ```{python}
+#| eval: false
 print("Comparative Statics Summary: Effect of γ on Value Functions")
 print("=" * 60)
 print(f"\nFixed parameters: β={beta}, δ={delta}")
