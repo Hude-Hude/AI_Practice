@@ -6,6 +6,7 @@ with Type-I Extreme Value shocks using monotonic neural networks.
 Based on pseudo code from solve_mdp.qmd.
 """
 
+import copy
 import math
 from typing import List, Tuple
 
@@ -257,6 +258,31 @@ def compute_choice_probability(
 # Solver
 # =============================================================================
 
+def copy_network(source: nn.Module) -> nn.Module:
+    """Create a deep copy of a network with frozen gradients.
+    
+    Implements COPY_NETWORK from pseudo code.
+    Used to create target networks that provide stable Bellman targets.
+    
+    Parameters
+    ----------
+    source : nn.Module
+        Network to copy from
+        
+    Returns
+    -------
+    nn.Module
+        Deep copy of source network with requires_grad=False
+    """
+    target: nn.Module = copy.deepcopy(source)
+    
+    # Freeze the target network (no gradient computation)
+    for param in target.parameters():
+        param.requires_grad = False
+    
+    return target
+
+
 def initialize_networks(hidden_sizes: HiddenSizes) -> NetworkPair:
     """Initialize two monotonic neural networks.
     
@@ -306,10 +332,12 @@ def solve_value_function(
     batch_size: int,
     tolerance: Scalar,
     max_iterations: int,
+    target_update_freq: int = 100,
 ) -> Tuple[nn.Module, nn.Module, List[float], int]:
     """Solve for value functions using neural network iteration.
     
     Implements SOLVE_VALUE_FUNCTION from pseudo code.
+    Uses target networks to provide stable Bellman targets.
     
     Parameters
     ----------
@@ -333,18 +361,24 @@ def solve_value_function(
         Convergence tolerance (on RMSE)
     max_iterations : int
         Maximum number of iterations
+    target_update_freq : int
+        How often to update target networks (default: 100)
         
     Returns
     -------
     Tuple[nn.Module, nn.Module, List[float], int]
         (v0_net, v1_net, losses, n_iterations)
     """
-    # Step 1: Initialize networks
+    # Step 1: Initialize policy networks (updated every iteration)
     v0_net: nn.Module
     v1_net: nn.Module
     v0_net, v1_net = initialize_networks(hidden_sizes)
     
-    # Create optimizer for both networks
+    # Initialize target networks (frozen copies, updated every T iterations)
+    v0_target: nn.Module = copy_network(v0_net)
+    v1_target: nn.Module = copy_network(v1_net)
+    
+    # Create optimizer for policy networks only
     optimizer: optim.Optimizer = optim.Adam(
         list(v0_net.parameters()) + list(v1_net.parameters()),
         lr=learning_rate,
@@ -358,16 +392,16 @@ def solve_value_function(
         # Sample batch of states
         s_batch: TensorVector = sample_states(batch_size, s_min, s_max)
         
-        # Forward pass: get predictions
+        # Predictions from policy networks
         v0_pred: TensorVector = evaluate_network(v0_net, s_batch)
         v1_pred: TensorVector = evaluate_network(v1_net, s_batch)
         
-        # Compute targets (with frozen weights - no gradient)
+        # Targets computed from TARGET networks (stable, not moving)
         with torch.no_grad():
             target0: TensorVector
             target1: TensorVector
             target0, target1 = compute_bellman_targets(
-                v0_net, v1_net, s_batch,
+                v0_target, v1_target, s_batch,
                 beta, gamma, delta,
             )
         
@@ -377,10 +411,15 @@ def solve_value_function(
         # Track loss
         losses.append(loss.item())
         
-        # Update weights via gradient descent
+        # Update policy networks via gradient descent
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        
+        # Periodically sync target networks with policy networks
+        if (k + 1) % target_update_freq == 0:
+            v0_target = copy_network(v0_net)
+            v1_target = copy_network(v1_net)
         
         # Check convergence
         if check_convergence(loss, tolerance):

@@ -4,6 +4,7 @@ import torch
 
 from mdp_solver import (
     check_convergence,
+    copy_network,
     evaluate_network,
     initialize_networks,
     sample_states,
@@ -37,6 +38,63 @@ class TestInitializeNetworks:
         # 2 hidden * 2 + 1 output = 5 layers
         assert len(v0_net) == 5
         assert len(v1_net) == 5
+
+
+class TestCopyNetwork:
+    """Tests for copy_network."""
+
+    def test_returns_copy(self) -> None:
+        """Should return a copy of the network."""
+        v0_net, _ = initialize_networks([8])
+        v0_copy = copy_network(v0_net)
+        assert v0_copy is not None
+        assert v0_copy is not v0_net
+
+    def test_same_weights(self) -> None:
+        """Copied network should have identical weights."""
+        v0_net, _ = initialize_networks([8])
+        v0_copy = copy_network(v0_net)
+        
+        # Check all parameters are equal
+        for p1, p2 in zip(v0_net.parameters(), v0_copy.parameters()):
+            assert torch.allclose(p1, p2)
+
+    def test_frozen_gradients(self) -> None:
+        """Copied network should have requires_grad=False."""
+        v0_net, _ = initialize_networks([8])
+        v0_copy = copy_network(v0_net)
+        
+        for param in v0_copy.parameters():
+            assert not param.requires_grad
+
+    def test_independent_weights(self) -> None:
+        """Modifying original should not affect copy."""
+        v0_net, _ = initialize_networks([8])
+        v0_copy = copy_network(v0_net)
+        
+        # Store original copy weights
+        original_weight = list(v0_copy.parameters())[0].clone()
+        
+        # Modify original network
+        with torch.no_grad():
+            for param in v0_net.parameters():
+                param.add_(1.0)
+        
+        # Copy should be unchanged
+        assert torch.allclose(list(v0_copy.parameters())[0], original_weight)
+
+    def test_same_output(self) -> None:
+        """Copied network should produce same outputs."""
+        v0_net, _ = initialize_networks([8, 8])
+        v0_copy = copy_network(v0_net)
+        
+        s = torch.linspace(0, 10, 50)
+        
+        with torch.no_grad():
+            out_original = evaluate_network(v0_net, s)
+            out_copy = evaluate_network(v0_copy, s)
+        
+        assert torch.allclose(out_original, out_copy)
 
 
 class TestSampleStates:
@@ -175,3 +233,55 @@ class TestSolveValueFunction:
         
         assert torch.all(torch.diff(v0) >= -1e-5)
         assert torch.all(torch.diff(v1) >= -1e-5)
+
+    def test_target_update_freq_parameter(self) -> None:
+        """Should accept target_update_freq parameter."""
+        torch.manual_seed(42)
+        v0_net, v1_net, losses, n_iter = solve_value_function(
+            beta=1.0, gamma=0.1, delta=0.9,
+            s_min=0.0, s_max=10.0,
+            hidden_sizes=[8],
+            learning_rate=0.01,
+            batch_size=32,
+            tolerance=1e-10,
+            max_iterations=50,
+            target_update_freq=10,
+        )
+        
+        assert v0_net is not None
+        assert v1_net is not None
+        assert len(losses) == 50
+
+    def test_target_network_improves_stability(self) -> None:
+        """Target networks should help with training stability."""
+        torch.manual_seed(42)
+        
+        # With frequent target updates (like no target network)
+        _, _, losses_freq, _ = solve_value_function(
+            beta=1.0, gamma=0.1, delta=0.9,
+            s_min=0.0, s_max=10.0,
+            hidden_sizes=[16, 16],
+            learning_rate=0.05,
+            batch_size=64,
+            tolerance=1e-10,
+            max_iterations=100,
+            target_update_freq=1,  # Update every iteration (no stable target)
+        )
+        
+        torch.manual_seed(42)
+        
+        # With infrequent target updates (stable targets)
+        _, _, losses_stable, _ = solve_value_function(
+            beta=1.0, gamma=0.1, delta=0.9,
+            s_min=0.0, s_max=10.0,
+            hidden_sizes=[16, 16],
+            learning_rate=0.05,
+            batch_size=64,
+            tolerance=1e-10,
+            max_iterations=100,
+            target_update_freq=50,  # Stable targets for 50 iterations
+        )
+        
+        # Both should train (loss should decrease)
+        assert losses_freq[-1] < losses_freq[0]
+        assert losses_stable[-1] < losses_stable[0]

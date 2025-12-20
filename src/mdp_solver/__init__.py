@@ -31,6 +31,7 @@ from mdp_solver.mdp_solver import (
     compute_bellman_loss,
     compute_choice_probability,
     # Solver
+    copy_network,
     initialize_networks,
     sample_states,
     check_convergence,
@@ -63,6 +64,7 @@ __all__ = [
     "compute_bellman_loss",
     "compute_choice_probability",
     # Solver
+    "copy_network",
     "initialize_networks",
     "sample_states",
     "check_convergence",
