@@ -302,9 +302,41 @@ def sample_states(
     """Sample states uniformly from [s_min, s_max].
     
     Implements SAMPLE_STATES from pseudo code.
+    Note: This is kept for backward compatibility.
+    Prefer generate_state_grid for stable training.
     """
     u: torch.Tensor = torch.rand(n)
     s: TensorVector = s_min + u * (s_max - s_min)
+    
+    return s
+
+
+def generate_state_grid(
+    n: int,
+    s_min: Scalar,
+    s_max: Scalar,
+) -> TensorVector:
+    """Generate a fixed grid of evenly spaced states.
+    
+    Implements GENERATE_STATE_GRID from pseudo code.
+    Using a fixed grid eliminates sampling variance and provides
+    stable loss signals for optimization.
+    
+    Parameters
+    ----------
+    n : int
+        Number of grid points
+    s_min : float
+        Minimum state value
+    s_max : float
+        Maximum state value
+        
+    Returns
+    -------
+    TensorVector
+        Fixed state grid of shape (n,) with evenly spaced points
+    """
+    s: TensorVector = torch.linspace(s_min, s_max, n)
     
     return s
 
@@ -378,6 +410,9 @@ def solve_value_function(
     v0_target: nn.Module = copy_network(v0_net)
     v1_target: nn.Module = copy_network(v1_net)
     
+    # Generate fixed state grid (same states used every iteration)
+    s_grid: TensorVector = generate_state_grid(batch_size, s_min, s_max)
+    
     # Create optimizer for policy networks only
     optimizer: optim.Optimizer = optim.Adam(
         list(v0_net.parameters()) + list(v1_net.parameters()),
@@ -389,21 +424,17 @@ def solve_value_function(
     
     # Step 2: Iterate
     for k in range(max_iterations):
-        # Sample batch of states
-        s_batch: TensorVector = sample_states(batch_size, s_min, s_max)
-        
-        # Predictions from policy networks
-        v0_pred: TensorVector = evaluate_network(v0_net, s_batch)
-        v1_pred: TensorVector = evaluate_network(v1_net, s_batch)
+        # Predictions from policy networks (using fixed grid)
+        v0_pred: TensorVector = evaluate_network(v0_net, s_grid)
+        v1_pred: TensorVector = evaluate_network(v1_net, s_grid)
         
         # Targets computed from TARGET networks (stable, not moving)
-        with torch.no_grad():
-            target0: TensorVector
-            target1: TensorVector
-            target0, target1 = compute_bellman_targets(
-                v0_target, v1_target, s_batch,
-                beta, gamma, delta,
-            )
+        target0: TensorVector
+        target1: TensorVector
+        target0, target1 = compute_bellman_targets(
+            v0_target, v1_target, s_grid,
+            beta, gamma, delta,
+        )
         
         # Compute loss
         loss: torch.Tensor = compute_bellman_loss(v0_pred, v1_pred, target0, target1)

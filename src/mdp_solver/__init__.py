@@ -34,6 +34,7 @@ from mdp_solver.mdp_solver import (
     copy_network,
     initialize_networks,
     sample_states,
+    generate_state_grid,
     check_convergence,
     solve_value_function,
 )
@@ -67,6 +68,7 @@ __all__ = [
     "copy_network",
     "initialize_networks",
     "sample_states",
+    "generate_state_grid",
     "check_convergence",
     "solve_value_function",
 ]

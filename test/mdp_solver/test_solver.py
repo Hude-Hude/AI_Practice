@@ -6,6 +6,7 @@ from mdp_solver import (
     check_convergence,
     copy_network,
     evaluate_network,
+    generate_state_grid,
     initialize_networks,
     sample_states,
     solve_value_function,
@@ -123,6 +124,43 @@ class TestSampleStates:
         std = s.std().item()
         expected_std = 10.0 / (12 ** 0.5)  # Uniform distribution std
         assert abs(std - expected_std) < 0.5
+
+
+class TestGenerateStateGrid:
+    """Tests for generate_state_grid."""
+
+    def test_correct_count(self) -> None:
+        """Should return correct number of grid points."""
+        s = generate_state_grid(n=100, s_min=0.0, s_max=10.0)
+        assert s.shape == (100,)
+
+    def test_within_bounds(self) -> None:
+        """All grid points should be within [s_min, s_max]."""
+        s = generate_state_grid(n=50, s_min=2.0, s_max=8.0)
+        assert torch.all(s >= 2.0)
+        assert torch.all(s <= 8.0)
+
+    def test_evenly_spaced(self) -> None:
+        """Grid points should be evenly spaced."""
+        s = generate_state_grid(n=11, s_min=0.0, s_max=10.0)
+        
+        # Check spacing is uniform
+        diffs = torch.diff(s)
+        assert torch.allclose(diffs, torch.ones_like(diffs))
+
+    def test_includes_endpoints(self) -> None:
+        """Grid should include both s_min and s_max."""
+        s = generate_state_grid(n=5, s_min=2.0, s_max=8.0)
+        
+        assert s[0].item() == 2.0
+        assert s[-1].item() == 8.0
+
+    def test_deterministic(self) -> None:
+        """Same inputs should produce same grid."""
+        s1 = generate_state_grid(n=100, s_min=0.0, s_max=10.0)
+        s2 = generate_state_grid(n=100, s_min=0.0, s_max=10.0)
+        
+        assert torch.allclose(s1, s2)
 
 
 class TestCheckConvergence:
