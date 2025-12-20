@@ -587,7 +587,7 @@ print("Modules loaded successfully")
 
 ```{python}
 # Model parameters
-beta = 0.5      # Utility coefficient in reward: β * log(1+s)
+beta = 1.0      # Utility coefficient in reward: β * log(1+s)
 gamma = 0.1     # State decay rate
 delta = 0.95    # Discount factor
 
