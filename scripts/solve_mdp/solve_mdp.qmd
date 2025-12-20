@@ -595,8 +595,8 @@ delta = 0.95    # Discount factor
 s_min = 0.0
 s_max = 20.0
 
-# Neural network architecture
-hidden_sizes = [64, 64]
+# Neural network architecture (single layer works best for monotonic networks)
+hidden_sizes = [16]
 
 # Training parameters
 learning_rate = 0.1     # Higher LR works well with target networks
@@ -796,7 +796,6 @@ This section examines how the value functions change as we vary the reward coeff
 ```{python}
 #| label: comparative-statics-setup
 #| cache: true
-#| eval: false
 
 def solve_and_extract_values(beta_val):
     """Solve MDP and extract value functions and choice probabilities for given beta."""
@@ -843,7 +842,6 @@ cmap_red = mcolors.LinearSegmentedColormap.from_list('black_red', ['black', 'red
 
 ```{python}
 #| fig-cap: "Value functions v(s,a) as β varies from 0 to 2. Left: a=0 (black→blue). Right: a=1 (black→red)."
-#| eval: false
 
 fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
@@ -887,7 +885,6 @@ plt.show()
 
 ```{python}
 #| fig-cap: "Choice probabilities P(a|s) as β varies from 0 to 2. Left: P(a=0|s) (black→blue). Right: P(a=1|s) (black→red)."
-#| eval: false
 
 fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
@@ -932,7 +929,6 @@ plt.show()
 ### Summary (β)
 
 ```{python}
-#| eval: false
 print("Comparative Statics Summary: Effect of β on Value Functions")
 print("=" * 60)
 print(f"\nFixed parameters: γ={gamma}, δ={delta}")
@@ -951,7 +947,6 @@ This section examines how the value functions change as we vary the decay rate �
 ```{python}
 #| label: comparative-statics-gamma
 #| cache: true
-#| eval: false
 
 def solve_and_extract_values_gamma(gamma_val):
     """Solve MDP and extract value functions and choice probabilities for given gamma."""
@@ -994,7 +989,6 @@ print("Complete!")
 
 ```{python}
 #| fig-cap: "Value functions v(s,a) as γ varies from 0 to 0.1. Left: a=0 (black→blue). Right: a=1 (black→red)."
-#| eval: false
 
 fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
@@ -1038,7 +1032,6 @@ plt.show()
 
 ```{python}
 #| fig-cap: "Choice probabilities P(a|s) as γ varies from 0 to 0.1. Left: P(a=0|s) (black→blue). Right: P(a=1|s) (black→red)."
-#| eval: false
 
 fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
@@ -1083,7 +1076,6 @@ plt.show()
 ### Summary (γ)
 
 ```{python}
-#| eval: false
 print("Comparative Statics Summary: Effect of γ on Value Functions")
 print("=" * 60)
 print(f"\nFixed parameters: β={beta}, δ={delta}")
