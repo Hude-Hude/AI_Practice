@@ -570,8 +570,11 @@ import torch
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 
-# Add project root to path and import MDP solver
+# Add project paths
 sys.path.insert(0, "../../src")
+sys.path.insert(0, "../config_mdp")
+
+# Import MDP solver
 from mdp_solver import (
     solve_value_function,
     compute_choice_probability,
@@ -580,34 +583,32 @@ from mdp_solver import (
     compute_bellman_targets,
 )
 
+# Import configuration
+import config
+
 print("Modules loaded successfully")
 ```
 
 ### Model Parameters
 
 ```{python}
-# Model parameters
-beta = 1.0      # Utility coefficient in reward: β * log(1+s)
-gamma = 0.1     # State decay rate
-delta = 0.95    # Discount factor
-
-# State space bounds
-s_min = 0.0
-s_max = 20.0
-
-# Neural network architecture (single layer works best for monotonic networks)
-hidden_sizes = [16]
-
-# Training parameters
-learning_rate = 0.1     # Higher LR works well with target networks
-batch_size = 256
-tolerance = 0.01        # Relaxed tolerance (achievable level)
-max_iterations = 20000  # More iterations for proper convergence
-target_update_freq = 10 # Target network update frequency
+# Load parameters from central config
+beta = config.beta
+gamma = config.gamma
+delta = config.delta
+s_min = config.s_min
+s_max = config.s_max
+hidden_sizes = config.hidden_sizes
+learning_rate = config.learning_rate
+batch_size = config.batch_size
+tolerance = config.tolerance
+max_iterations = config.max_iterations
+target_update_freq = config.target_update_freq
 
 print(f"Model: u(s,a) = {beta} * log(1+s) - a")
 print(f"Transition: s' = {1-gamma:.1f} * s + a")
 print(f"Discount factor: δ = {delta}")
+print(f"\nLoaded from: scripts/config_mdp/config.py")
 ```
 
 ### Solve the MDP
