@@ -8,3 +8,72 @@ format:
     toc-depth: 3
 ---
 
+## Setup
+
+```{python}
+#| label: setup
+
+import json
+import sys
+from pathlib import Path
+
+import numpy as np
+import torch
+
+# Add project root to path and import MDP solver
+sys.path.insert(0, "../../src")
+from mdp_solver import (
+    build_monotonic_network,
+    evaluate_network,
+    compute_choice_probability,
+    compute_integrated_value,
+)
+
+print("Modules loaded successfully")
+```
+
+## Load Trained Model
+
+```{python}
+#| label: load-model
+
+# Load saved results from solve_mdp
+output_dir = Path("../../output/solve_mdp")
+
+# Load config
+with open(output_dir / "config.json", "r") as f:
+    config = json.load(f)
+
+beta = config["beta"]
+gamma = config["gamma"]
+delta = config["delta"]
+s_min = config["s_min"]
+s_max = config["s_max"]
+hidden_sizes = config["hidden_sizes"]
+
+print("Model parameters:")
+print(f"  beta = {beta}")
+print(f"  gamma = {gamma}")
+print(f"  delta = {delta}")
+print(f"  s_min = {s_min}")
+print(f"  s_max = {s_max}")
+print(f"  hidden_sizes = {hidden_sizes}")
+
+# Reconstruct networks and load trained weights
+v0_net = build_monotonic_network(hidden_sizes=hidden_sizes)
+v1_net = build_monotonic_network(hidden_sizes=hidden_sizes)
+
+v0_net.load_state_dict(torch.load(output_dir / "v0_net.pt", weights_only=True))
+v1_net.load_state_dict(torch.load(output_dir / "v1_net.pt", weights_only=True))
+
+v0_net.eval()
+v1_net.eval()
+
+# Load training losses
+losses = np.load(output_dir / "losses.npy")
+
+print(f"\nLoaded trained networks from {output_dir.resolve()}")
+print(f"  Training iterations: {len(losses)}")
+print(f"  Final RMSE: {losses[-1]**0.5:.2e}")
+```
+

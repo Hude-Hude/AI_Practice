@@ -687,7 +687,7 @@ OUTPUT:
 </section>
 <section id="model-parameters" class="level3">
 <h3 class="anchored" data-anchor-id="model-parameters">Model Parameters</h3>
-<div id="5d3c300e" class="cell" data-execution_count="2">
+<div id="5bd34cd0" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Model parameters</span></span>
 <span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>beta <span class="op">=</span> <span class="fl">1.0</span>      <span class="co"># Utility coefficient in reward: β * log(1+s)</span></span>
 <span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>gamma <span class="op">=</span> <span class="fl">0.1</span>     <span class="co"># State decay rate</span></span>
@@ -739,10 +739,48 @@ Discount factor: δ = 0.95</code></pre>
 <span id="cb22-17"><a href="#cb22-17" aria-hidden="true" tabindex="-1"></a>)</span>
 <span id="cb22-18"><a href="#cb22-18" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb22-19"><a href="#cb22-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Converged in </span><span class="sc">{</span>n_iter<span class="sc">}</span><span class="ss"> iterations"</span>)</span>
-<span id="cb22-20"><a href="#cb22-20" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Final RMSE: </span><span class="sc">{</span>losses[<span class="op">-</span><span class="dv">1</span>]<span class="op">**</span><span class="fl">0.5</span><span class="sc">:.2e}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb22-20"><a href="#cb22-20" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Final RMSE: </span><span class="sc">{</span>losses[<span class="op">-</span><span class="dv">1</span>]<span class="op">**</span><span class="fl">0.5</span><span class="sc">:.2e}</span><span class="ss">"</span>)</span>
+<span id="cb22-21"><a href="#cb22-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-22"><a href="#cb22-22" aria-hidden="true" tabindex="-1"></a><span class="co"># Save results to output/solve_mdp/</span></span>
+<span id="cb22-23"><a href="#cb22-23" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> json</span>
+<span id="cb22-24"><a href="#cb22-24" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> pathlib <span class="im">import</span> Path</span>
+<span id="cb22-25"><a href="#cb22-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-26"><a href="#cb22-26" aria-hidden="true" tabindex="-1"></a>output_dir <span class="op">=</span> Path(<span class="st">"../../output/solve_mdp"</span>)</span>
+<span id="cb22-27"><a href="#cb22-27" aria-hidden="true" tabindex="-1"></a>output_dir.mkdir(parents<span class="op">=</span><span class="va">True</span>, exist_ok<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb22-28"><a href="#cb22-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-29"><a href="#cb22-29" aria-hidden="true" tabindex="-1"></a><span class="co"># Save config (model parameters)</span></span>
+<span id="cb22-30"><a href="#cb22-30" aria-hidden="true" tabindex="-1"></a>config <span class="op">=</span> {</span>
+<span id="cb22-31"><a href="#cb22-31" aria-hidden="true" tabindex="-1"></a>    <span class="st">"beta"</span>: beta,</span>
+<span id="cb22-32"><a href="#cb22-32" aria-hidden="true" tabindex="-1"></a>    <span class="st">"gamma"</span>: gamma,</span>
+<span id="cb22-33"><a href="#cb22-33" aria-hidden="true" tabindex="-1"></a>    <span class="st">"delta"</span>: delta,</span>
+<span id="cb22-34"><a href="#cb22-34" aria-hidden="true" tabindex="-1"></a>    <span class="st">"s_min"</span>: s_min,</span>
+<span id="cb22-35"><a href="#cb22-35" aria-hidden="true" tabindex="-1"></a>    <span class="st">"s_max"</span>: s_max,</span>
+<span id="cb22-36"><a href="#cb22-36" aria-hidden="true" tabindex="-1"></a>    <span class="st">"hidden_sizes"</span>: hidden_sizes,</span>
+<span id="cb22-37"><a href="#cb22-37" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb22-38"><a href="#cb22-38" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> <span class="bu">open</span>(output_dir <span class="op">/</span> <span class="st">"config.json"</span>, <span class="st">"w"</span>) <span class="im">as</span> f:</span>
+<span id="cb22-39"><a href="#cb22-39" aria-hidden="true" tabindex="-1"></a>    json.dump(config, f, indent<span class="op">=</span><span class="dv">2</span>)</span>
+<span id="cb22-40"><a href="#cb22-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-41"><a href="#cb22-41" aria-hidden="true" tabindex="-1"></a><span class="co"># Save trained networks</span></span>
+<span id="cb22-42"><a href="#cb22-42" aria-hidden="true" tabindex="-1"></a>torch.save(v0_net.state_dict(), output_dir <span class="op">/</span> <span class="st">"v0_net.pt"</span>)</span>
+<span id="cb22-43"><a href="#cb22-43" aria-hidden="true" tabindex="-1"></a>torch.save(v1_net.state_dict(), output_dir <span class="op">/</span> <span class="st">"v1_net.pt"</span>)</span>
+<span id="cb22-44"><a href="#cb22-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-45"><a href="#cb22-45" aria-hidden="true" tabindex="-1"></a><span class="co"># Save training losses</span></span>
+<span id="cb22-46"><a href="#cb22-46" aria-hidden="true" tabindex="-1"></a>np.save(output_dir <span class="op">/</span> <span class="st">"losses.npy"</span>, np.array(losses))</span>
+<span id="cb22-47"><a href="#cb22-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-48"><a href="#cb22-48" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"</span><span class="ch">\n</span><span class="ss">Results saved to </span><span class="sc">{</span>output_dir<span class="sc">.</span>resolve()<span class="sc">}</span><span class="ss">:"</span>)</span>
+<span id="cb22-49"><a href="#cb22-49" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"  - config.json (model parameters)"</span>)</span>
+<span id="cb22-50"><a href="#cb22-50" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"  - v0_net.pt (action 0 network)"</span>)</span>
+<span id="cb22-51"><a href="#cb22-51" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"  - v1_net.pt (action 1 network)"</span>)</span>
+<span id="cb22-52"><a href="#cb22-52" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"  - losses.npy (</span><span class="sc">{</span><span class="bu">len</span>(losses)<span class="sc">}</span><span class="ss"> iterations)"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Converged in 1025 iterations
-Final RMSE: 9.94e-03</code></pre>
+Final RMSE: 9.94e-03
+
+Results saved to /Users/kissshot894/Documents/HKUST/RA/MDP_Practice/output/solve_mdp:
+  - config.json (model parameters)
+  - v0_net.pt (action 0 network)
+  - v1_net.pt (action 1 network)
+  - losses.npy (1025 iterations)</code></pre>
 </div>
 </div>
 </section>
@@ -750,7 +788,7 @@ Final RMSE: 9.94e-03</code></pre>
 <h3 class="anchored" data-anchor-id="results">Results</h3>
 <section id="convergence-plot" class="level4">
 <h4 class="anchored" data-anchor-id="convergence-plot">Convergence Plot</h4>
-<div id="422e1778" class="cell" data-execution_count="4">
+<div id="20381aba" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>plt.figure(figsize<span class="op">=</span>(<span class="dv">10</span>, <span class="dv">4</span>))</span>
 <span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a>plt.semilogy(losses, <span class="st">'b-'</span>, linewidth<span class="op">=</span><span class="fl">0.5</span>)</span>
 <span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">'Iteration'</span>)</span>
@@ -771,7 +809,7 @@ Final RMSE: 9.94e-03</code></pre>
 </section>
 <section id="value-functions" class="level4">
 <h4 class="anchored" data-anchor-id="value-functions">Value Functions</h4>
-<div id="5fd8d60c" class="cell" data-execution_count="5">
+<div id="6885843c" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Create evaluation grid</span></span>
 <span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a>s_eval <span class="op">=</span> torch.linspace(s_min, s_max, <span class="dv">200</span>)</span>
 <span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -806,7 +844,7 @@ Final RMSE: 9.94e-03</code></pre>
 </section>
 <section id="choice-probabilities" class="level4">
 <h4 class="anchored" data-anchor-id="choice-probabilities">Choice Probabilities</h4>
-<div id="95e10236" class="cell" data-execution_count="6">
+<div id="1509f810" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Compute choice probabilities</span></span>
 <span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> torch.no_grad():</span>
 <span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a>    prob_a0, prob_a1 <span class="op">=</span> compute_choice_probability(v0_net, v1_net, s_eval)</span>
@@ -837,7 +875,7 @@ Final RMSE: 9.94e-03</code></pre>
 </section>
 <section id="value-difference" class="level4">
 <h4 class="anchored" data-anchor-id="value-difference">Value Difference</h4>
-<div id="017914a0" class="cell" data-execution_count="7">
+<div id="817a83a0" class="cell" data-execution_count="7">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>plt.figure(figsize<span class="op">=</span>(<span class="dv">10</span>, <span class="dv">5</span>))</span>
 <span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a>value_diff <span class="op">=</span> v1_values <span class="op">-</span> v0_values</span>
 <span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a>plt.plot(s_np, value_diff, <span class="st">'m-'</span>, linewidth<span class="op">=</span><span class="dv">2</span>)</span>
@@ -860,7 +898,7 @@ Final RMSE: 9.94e-03</code></pre>
 </section>
 <section id="bellman-residuals" class="level4">
 <h4 class="anchored" data-anchor-id="bellman-residuals">Bellman Residuals</h4>
-<div id="a934a1b9" class="cell" data-execution_count="8">
+<div id="2864eadd" class="cell" data-execution_count="8">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Compute Bellman targets at evaluation points</span></span>
 <span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> torch.no_grad():</span>
 <span id="cb28-3"><a href="#cb28-3" aria-hidden="true" tabindex="-1"></a>    target0, target1 <span class="op">=</span> compute_bellman_targets(</span>
@@ -920,7 +958,7 @@ Final RMSE: 9.94e-03</code></pre>
 </section>
 <section id="interpretation-1" class="level3">
 <h3 class="anchored" data-anchor-id="interpretation-1">Interpretation</h3>
-<div id="dd8893d1" class="cell" data-execution_count="9">
+<div id="dcc45aa9" class="cell" data-execution_count="9">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb30"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Find threshold state where P(a=1) ≈ 0.5</span></span>
 <span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a>threshold_idx <span class="op">=</span> np.argmin(np.<span class="bu">abs</span>(prob_a1 <span class="op">-</span> <span class="fl">0.5</span>))</span>
 <span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a>threshold_state <span class="op">=</span> s_np[threshold_idx]</span>
@@ -1004,7 +1042,7 @@ Complete!</code></pre>
 </div>
 <section id="value-functions-by-action" class="level3">
 <h3 class="anchored" data-anchor-id="value-functions-by-action">Value Functions by Action</h3>
-<div id="ecde01e4" class="cell" data-execution_count="11">
+<div id="2fca39dd" class="cell" data-execution_count="11">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb34"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">14</span>, <span class="dv">5</span>))</span>
 <span id="cb34-2"><a href="#cb34-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb34-3"><a href="#cb34-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot v(s, 0) - No investment (black to blue)</span></span>
@@ -1053,7 +1091,7 @@ Complete!</code></pre>
 </section>
 <section id="choice-probabilities-by-action" class="level3">
 <h3 class="anchored" data-anchor-id="choice-probabilities-by-action">Choice Probabilities by Action</h3>
-<div id="fcc71950" class="cell" data-execution_count="12">
+<div id="11be33e3" class="cell" data-execution_count="12">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb35"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">14</span>, <span class="dv">5</span>))</span>
 <span id="cb35-2"><a href="#cb35-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb35-3"><a href="#cb35-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot P(a=0|s) - No investment (black to blue)</span></span>
@@ -1104,7 +1142,7 @@ Complete!</code></pre>
 </section>
 <section id="summary-β" class="level3">
 <h3 class="anchored" data-anchor-id="summary-β">Summary (β)</h3>
-<div id="d73d7399" class="cell" data-execution_count="13">
+<div id="aa5835b1" class="cell" data-execution_count="13">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb36"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"Comparative Statics Summary: Effect of β on Value Functions"</span>)</span>
 <span id="cb36-2"><a href="#cb36-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"="</span> <span class="op">*</span> <span class="dv">60</span>)</span>
 <span id="cb36-3"><a href="#cb36-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"</span><span class="ch">\n</span><span class="ss">Fixed parameters: γ=</span><span class="sc">{</span>gamma<span class="sc">}</span><span class="ss">, δ=</span><span class="sc">{</span>delta<span class="sc">}</span><span class="ss">"</span>)</span>
@@ -1181,7 +1219,7 @@ Complete!</code></pre>
 </div>
 <section id="value-functions-by-action-γ" class="level3">
 <h3 class="anchored" data-anchor-id="value-functions-by-action-γ">Value Functions by Action (γ)</h3>
-<div id="a11e7016" class="cell" data-execution_count="15">
+<div id="c74acfbe" class="cell" data-execution_count="15">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb40"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">14</span>, <span class="dv">5</span>))</span>
 <span id="cb40-2"><a href="#cb40-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb40-3"><a href="#cb40-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot v(s, 0) - No investment (black to blue)</span></span>
@@ -1230,7 +1268,7 @@ Complete!</code></pre>
 </section>
 <section id="choice-probabilities-by-action-γ" class="level3">
 <h3 class="anchored" data-anchor-id="choice-probabilities-by-action-γ">Choice Probabilities by Action (γ)</h3>
-<div id="354bd073" class="cell" data-execution_count="16">
+<div id="6a13bf83" class="cell" data-execution_count="16">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb41"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">14</span>, <span class="dv">5</span>))</span>
 <span id="cb41-2"><a href="#cb41-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb41-3"><a href="#cb41-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot P(a=0|s) - No investment (black to blue)</span></span>
@@ -1281,7 +1319,7 @@ Complete!</code></pre>
 </section>
 <section id="summary-γ" class="level3">
 <h3 class="anchored" data-anchor-id="summary-γ">Summary (γ)</h3>
-<div id="e7a94941" class="cell" data-execution_count="17">
+<div id="7dc77a85" class="cell" data-execution_count="17">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb42"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"Comparative Statics Summary: Effect of γ on Value Functions"</span>)</span>
 <span id="cb42-2"><a href="#cb42-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"="</span> <span class="op">*</span> <span class="dv">60</span>)</span>
 <span id="cb42-3"><a href="#cb42-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"</span><span class="ch">\n</span><span class="ss">Fixed parameters: β=</span><span class="sc">{</span>beta<span class="sc">}</span><span class="ss">, δ=</span><span class="sc">{</span>delta<span class="sc">}</span><span class="ss">"</span>)</span>

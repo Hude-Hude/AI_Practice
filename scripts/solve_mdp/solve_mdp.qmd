@@ -636,6 +636,38 @@ v0_net, v1_net, losses, n_iter = solve_value_function(
 
 print(f"Converged in {n_iter} iterations")
 print(f"Final RMSE: {losses[-1]**0.5:.2e}")
+
+# Save results to output/solve_mdp/
+import json
+from pathlib import Path
+
+output_dir = Path("../../output/solve_mdp")
+output_dir.mkdir(parents=True, exist_ok=True)
+
+# Save config (model parameters)
+config = {
+    "beta": beta,
+    "gamma": gamma,
+    "delta": delta,
+    "s_min": s_min,
+    "s_max": s_max,
+    "hidden_sizes": hidden_sizes,
+}
+with open(output_dir / "config.json", "w") as f:
+    json.dump(config, f, indent=2)
+
+# Save trained networks
+torch.save(v0_net.state_dict(), output_dir / "v0_net.pt")
+torch.save(v1_net.state_dict(), output_dir / "v1_net.pt")
+
+# Save training losses
+np.save(output_dir / "losses.npy", np.array(losses))
+
+print(f"\nResults saved to {output_dir.resolve()}:")
+print(f"  - config.json (model parameters)")
+print(f"  - v0_net.pt (action 0 network)")
+print(f"  - v1_net.pt (action 1 network)")
+print(f"  - losses.npy ({len(losses)} iterations)")
 ```
 
 ### Results
