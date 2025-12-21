@@ -284,6 +284,36 @@ print(f"\nSimulation complete:")
 print(f"  Agents: {panel.n_agents}")
 print(f"  Periods: {panel.n_periods}")
 print(f"  Total observations: {panel.n_agents * panel.n_periods:,}")
+
+# Save simulated data for estimation
+import json
+
+sim_output_dir = Path("../../output/simulate_mdp")
+sim_output_dir.mkdir(parents=True, exist_ok=True)
+
+# Save panel data arrays
+np.save(sim_output_dir / "states.npy", panel.states)
+np.save(sim_output_dir / "actions.npy", panel.actions)
+np.save(sim_output_dir / "rewards.npy", panel.rewards)
+
+# Save simulation configuration
+sim_config = {
+    "n_agents": n_agents,
+    "n_periods": n_periods,
+    "seed": simulation_seed,
+    "s_init_distribution": f"Uniform[{s_min}, {s_max}]",
+    "beta": beta,
+    "gamma": gamma,
+    "delta": delta,
+}
+with open(sim_output_dir / "config.json", "w") as f:
+    json.dump(sim_config, f, indent=2)
+
+print(f"\nSaved simulation data to {sim_output_dir.resolve()}:")
+print(f"  states.npy:  {panel.states.shape}")
+print(f"  actions.npy: {panel.actions.shape}")
+print(f"  rewards.npy: {panel.rewards.shape}")
+print(f"  config.json: simulation parameters")
 ```
 
 ## Simulation Results

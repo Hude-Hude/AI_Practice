@@ -1,11 +1,12 @@
 """Unit and integration tests for MDP Estimator.
 
-Tests:
-1. Unit test: compute_log_likelihood returns correct sign and magnitude
-2. Unit test: compute_log_likelihood returns -inf for invalid parameters
-3. Unit test: True parameters have higher likelihood than wrong parameters
-4. Unit test: Standard errors are positive
-5. Integration test: Full estimation workflow runs without error
+Unit Tests (fast, no solver needed):
+- Parameter validation (returns -inf for invalid params)
+- Data structure checks
+
+Integration Tests (slow, requires solver):
+- Full estimation workflow
+- Parameter recovery
 """
 
 import pytest
@@ -22,81 +23,166 @@ from mdp_estimator import (
     estimate_mle,
     compute_standard_errors,
 )
-from mdp_simulator import simulate_mdp_panel, PanelData
-from mdp_solver import solve_value_function
+from mdp_simulator import PanelData
 
 
 # =============================================================================
-# Fixtures
+# Fixtures for Unit Tests (no solver needed)
 # =============================================================================
 
 @pytest.fixture
-def true_params():
-    """True structural parameters."""
-    return {
-        'beta': 1.5,
-        'gamma': 0.1,
-        'delta': 0.9,
-    }
+def fake_panel_data():
+    """Create fake panel data for unit tests (no solver needed)."""
+    n_agents, n_periods = 10, 5
+    return PanelData(
+        states=np.random.uniform(0, 10, size=(n_agents, n_periods)),
+        actions=np.random.randint(0, 2, size=(n_agents, n_periods)),
+        rewards=np.random.randn(n_agents, n_periods),
+        n_agents=n_agents,
+        n_periods=n_periods,
+    )
 
 
 @pytest.fixture
 def solver_params():
-    """Solver hyperparameters for testing (smaller for speed)."""
+    """Solver hyperparameters (from config, matching saved simulation)."""
+    # Add config path
+    config_path = os.path.join(
+        os.path.dirname(__file__), '..', '..', 'scripts', 'config_mdp'
+    )
+    if config_path not in sys.path:
+        sys.path.insert(0, config_path)
+    
+    import config
     return {
-        's_min': 0.0,
-        's_max': 10.0,
-        'hidden_sizes': [32, 32],
-        'learning_rate': 0.01,
-        'batch_size': 128,
-        'tolerance': 1e-3,
-        'max_iterations': 2000,
-        'target_update_freq': 50,
+        's_min': config.s_min,
+        's_max': config.s_max,
+        'hidden_sizes': config.hidden_sizes,
+        'learning_rate': config.learning_rate,
+        'batch_size': config.batch_size,
+        'tolerance': config.tolerance,
+        'max_iterations': config.max_iterations,
+        'target_update_freq': config.target_update_freq,
+    }
+
+
+# =============================================================================
+# Fixtures for Integration Tests (load saved data - no solver needed)
+# =============================================================================
+
+@pytest.fixture
+def true_params():
+    """True structural parameters (from saved simulation config)."""
+    import json
+    config_path = os.path.join(
+        os.path.dirname(__file__), '..', '..', 'output', 'simulate_mdp', 'config.json'
+    )
+    with open(config_path, 'r') as f:
+        config = json.load(f)
+    return {
+        'beta': config['beta'],
+        'gamma': config['gamma'],
+        'delta': config['delta'],
     }
 
 
 @pytest.fixture
-def trained_networks(true_params, solver_params):
-    """Train value networks at true parameters."""
-    v0_net, v1_net, losses, n_iter = solve_value_function(
-        beta=true_params['beta'],
-        gamma=true_params['gamma'],
-        delta=true_params['delta'],
-        s_min=solver_params['s_min'],
-        s_max=solver_params['s_max'],
-        hidden_sizes=solver_params['hidden_sizes'],
-        learning_rate=solver_params['learning_rate'],
-        batch_size=solver_params['batch_size'],
-        tolerance=solver_params['tolerance'],
-        max_iterations=solver_params['max_iterations'],
-        target_update_freq=solver_params['target_update_freq'],
+def simulated_data():
+    """Load saved panel data from output/simulate_mdp/ (no solver needed)."""
+    data_dir = os.path.join(
+        os.path.dirname(__file__), '..', '..', 'output', 'simulate_mdp'
     )
-    return v0_net, v1_net
-
-
-@pytest.fixture
-def simulated_data(trained_networks, true_params):
-    """Simulate panel data from true model."""
-    v0_net, v1_net = trained_networks
-    data = simulate_mdp_panel(
-        v0_net=v0_net,
-        v1_net=v1_net,
-        n_agents=50,
-        n_periods=20,
-        s_init=5.0,
-        beta=true_params['beta'],
-        gamma=true_params['gamma'],
-        seed=42,
+    
+    states = np.load(os.path.join(data_dir, 'states.npy'))
+    actions = np.load(os.path.join(data_dir, 'actions.npy'))
+    rewards = np.load(os.path.join(data_dir, 'rewards.npy'))
+    
+    n_agents, n_periods = states.shape
+    
+    return PanelData(
+        states=states,
+        actions=actions,
+        rewards=rewards,
+        n_agents=n_agents,
+        n_periods=n_periods,
     )
-    return data
 
 
 # =============================================================================
-# Unit Tests: compute_log_likelihood
+# UNIT TESTS (Fast - no solver needed)
 # =============================================================================
 
+class TestParameterValidation:
+    """Unit tests for parameter validation (fast, no solver needed)."""
+    
+    def test_invalid_beta_zero_returns_neg_inf(self, fake_panel_data, solver_params):
+        """beta = 0 should return -inf immediately (no solver call)."""
+        theta = np.array([0.0, 0.1, 0.9])
+        ll = compute_log_likelihood(theta, fake_panel_data, solver_params)
+        assert ll == -np.inf
+    
+    def test_invalid_beta_negative_returns_neg_inf(self, fake_panel_data, solver_params):
+        """beta < 0 should return -inf immediately (no solver call)."""
+        theta = np.array([-1.0, 0.1, 0.9])
+        ll = compute_log_likelihood(theta, fake_panel_data, solver_params)
+        assert ll == -np.inf
+    
+    def test_invalid_gamma_zero_returns_neg_inf(self, fake_panel_data, solver_params):
+        """gamma = 0 should return -inf immediately (no solver call)."""
+        theta = np.array([1.5, 0.0, 0.9])
+        ll = compute_log_likelihood(theta, fake_panel_data, solver_params)
+        assert ll == -np.inf
+    
+    def test_invalid_gamma_one_returns_neg_inf(self, fake_panel_data, solver_params):
+        """gamma = 1 should return -inf immediately (no solver call)."""
+        theta = np.array([1.5, 1.0, 0.9])
+        ll = compute_log_likelihood(theta, fake_panel_data, solver_params)
+        assert ll == -np.inf
+    
+    def test_invalid_delta_zero_returns_neg_inf(self, fake_panel_data, solver_params):
+        """delta = 0 should return -inf immediately (no solver call)."""
+        theta = np.array([1.5, 0.1, 0.0])
+        ll = compute_log_likelihood(theta, fake_panel_data, solver_params)
+        assert ll == -np.inf
+    
+    def test_invalid_delta_one_returns_neg_inf(self, fake_panel_data, solver_params):
+        """delta = 1 should return -inf immediately (no solver call)."""
+        theta = np.array([1.5, 0.1, 1.0])
+        ll = compute_log_likelihood(theta, fake_panel_data, solver_params)
+        assert ll == -np.inf
+
+
+class TestEstimationResultStructure:
+    """Unit tests for EstimationResult data structure."""
+    
+    def test_estimation_result_fields(self):
+        """EstimationResult should have all required fields."""
+        result = EstimationResult(
+            theta_hat=np.array([1.0, 0.1, 0.9]),
+            std_errors=np.array([0.1, 0.01, 0.05]),
+            cov_matrix=np.eye(3) * 0.01,
+            log_likelihood=-100.0,
+            n_iterations=50,
+            converged=True,
+            optimization_result=None,
+        )
+        
+        assert result.theta_hat.shape == (3,)
+        assert result.std_errors.shape == (3,)
+        assert result.cov_matrix.shape == (3, 3)
+        assert isinstance(result.log_likelihood, float)
+        assert isinstance(result.n_iterations, int)
+        assert isinstance(result.converged, bool)
+
+
+# =============================================================================
+# INTEGRATION TESTS (Slow - requires solver)
+# Mark with pytest.mark.slow so they can be skipped
+# =============================================================================
+
+@pytest.mark.slow
 class TestComputeLogLikelihood:
-    """Unit tests for compute_log_likelihood function."""
+    """Integration tests for compute_log_likelihood (requires solver)."""
     
     def test_returns_finite_value(self, simulated_data, true_params, solver_params):
         """Log-likelihood should return a finite value for valid parameters."""
@@ -112,42 +198,6 @@ class TestComputeLogLikelihood:
         
         assert ll < 0, "Log-likelihood should be negative"
     
-    def test_invalid_beta_returns_neg_inf(self, simulated_data, solver_params):
-        """Invalid beta (<=0) should return -inf."""
-        theta = np.array([0.0, 0.1, 0.9])  # beta = 0
-        ll = compute_log_likelihood(theta, simulated_data, solver_params)
-        
-        assert ll == -np.inf, "Invalid beta should return -inf"
-        
-        theta = np.array([-1.0, 0.1, 0.9])  # beta < 0
-        ll = compute_log_likelihood(theta, simulated_data, solver_params)
-        
-        assert ll == -np.inf, "Negative beta should return -inf"
-    
-    def test_invalid_gamma_returns_neg_inf(self, simulated_data, solver_params):
-        """Invalid gamma (<=0 or >=1) should return -inf."""
-        theta = np.array([1.5, 0.0, 0.9])  # gamma = 0
-        ll = compute_log_likelihood(theta, simulated_data, solver_params)
-        
-        assert ll == -np.inf, "gamma=0 should return -inf"
-        
-        theta = np.array([1.5, 1.0, 0.9])  # gamma = 1
-        ll = compute_log_likelihood(theta, simulated_data, solver_params)
-        
-        assert ll == -np.inf, "gamma=1 should return -inf"
-    
-    def test_invalid_delta_returns_neg_inf(self, simulated_data, solver_params):
-        """Invalid delta (<=0 or >=1) should return -inf."""
-        theta = np.array([1.5, 0.1, 0.0])  # delta = 0
-        ll = compute_log_likelihood(theta, simulated_data, solver_params)
-        
-        assert ll == -np.inf, "delta=0 should return -inf"
-        
-        theta = np.array([1.5, 0.1, 1.0])  # delta = 1
-        ll = compute_log_likelihood(theta, simulated_data, solver_params)
-        
-        assert ll == -np.inf, "delta=1 should return -inf"
-    
     def test_true_params_higher_likelihood(self, simulated_data, true_params, solver_params):
         """True parameters should have higher likelihood than wrong parameters."""
         theta_true = np.array([true_params['beta'], true_params['gamma'], true_params['delta']])
@@ -160,12 +210,9 @@ class TestComputeLogLikelihood:
             f"True params LL ({ll_true:.2f}) should be > wrong params LL ({ll_wrong:.2f})"
 
 
-# =============================================================================
-# Unit Tests: compute_standard_errors
-# =============================================================================
-
+@pytest.mark.slow
 class TestComputeStandardErrors:
-    """Unit tests for compute_standard_errors function."""
+    """Integration tests for compute_standard_errors (requires solver)."""
     
     def test_returns_positive_std_errors(self, simulated_data, true_params, solver_params):
         """Standard errors should be positive."""
@@ -205,12 +252,9 @@ class TestComputeStandardErrors:
             )
 
 
-# =============================================================================
-# Unit Tests: estimate_mle
-# =============================================================================
-
+@pytest.mark.slow
 class TestEstimateMLE:
-    """Unit tests for estimate_mle function."""
+    """Integration tests for estimate_mle (requires solver)."""
     
     def test_returns_estimation_result(self, simulated_data, true_params, solver_params):
         """estimate_mle should return EstimationResult object."""
@@ -231,12 +275,9 @@ class TestEstimateMLE:
         assert isinstance(result.converged, bool), "converged should be bool"
 
 
-# =============================================================================
-# Integration Tests
-# =============================================================================
-
+@pytest.mark.slow
 class TestIntegration:
-    """Integration tests for full estimation workflow."""
+    """Integration tests for full estimation workflow (requires solver)."""
     
     def test_full_workflow_runs(self, simulated_data, true_params, solver_params):
         """Full estimation workflow should run without error."""

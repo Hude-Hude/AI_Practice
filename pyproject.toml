@@ -31,4 +31,7 @@ packages = ["src/mdp_solver"]
 testpaths = ["test"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
+markers = [
+    "slow: marks tests as slow (require solver, deselect with '-m \"not slow\"')",
+]
 
