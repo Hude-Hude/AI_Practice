@@ -7,12 +7,13 @@ This module implements:
 - compute_standard_errors: Numerical Hessian-based standard errors
 """
 
+import os
 import warnings
 import numpy as np
 import torch
 from scipy import optimize
 from dataclasses import dataclass
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict, Any, Optional
 
 from mdp_solver import solve_value_function, compute_choice_probability
 from mdp_simulator import PanelData
@@ -60,6 +61,8 @@ def compute_log_likelihood(
     theta: np.ndarray,
     data: PanelData,
     solver_params: Dict[str, Any],
+    v0_init_state: Optional[dict] = None,
+    v1_init_state: Optional[dict] = None,
 ) -> float:
     """Compute log-likelihood for candidate parameters.
     
@@ -83,6 +86,10 @@ def compute_log_likelihood(
         - tolerance: float, convergence tolerance for inner loop
         - max_iterations: int, max iterations for inner loop
         - target_update_freq: int (optional, default 100)
+    v0_init_state : dict, optional
+        Initial state dict for v0 network (warm-start)
+    v1_init_state : dict, optional
+        Initial state dict for v1 network (warm-start)
     
     Returns
     -------
@@ -109,6 +116,8 @@ def compute_log_likelihood(
         tolerance=solver_params['tolerance'],
         max_iterations=solver_params['max_iterations'],
         target_update_freq=solver_params.get('target_update_freq', 100),
+        v0_init_state=v0_init_state,
+        v1_init_state=v1_init_state,
     )
     
     # Check convergence (optional: warn if not converged)
@@ -148,6 +157,7 @@ def estimate_mle(
     solver_params: Dict[str, Any],
     maxiter: int = 200,
     verbose: bool = True,
+    pretrained_path: Optional[str] = None,
 ) -> EstimationResult:
     """Estimate structural parameters via MLE using NFXP.
     
@@ -166,6 +176,9 @@ def estimate_mle(
         Maximum outer loop iterations (default 200)
     verbose : bool
         Print progress during optimization (default True)
+    pretrained_path : str, optional
+        Path to directory containing pre-trained networks (v0_net.pt, v1_net.pt).
+        If provided, uses these as warm-start initialization for all solver calls.
     
     Returns
     -------
@@ -175,13 +188,31 @@ def estimate_mle(
     """
     theta_init = np.array(theta_init)
     
+    # Load pre-trained networks for warm-starting (if provided)
+    v0_init_state = None
+    v1_init_state = None
+    if pretrained_path is not None:
+        v0_path = os.path.join(pretrained_path, 'v0_net.pt')
+        v1_path = os.path.join(pretrained_path, 'v1_net.pt')
+        if os.path.exists(v0_path) and os.path.exists(v1_path):
+            v0_init_state = torch.load(v0_path, weights_only=True)
+            v1_init_state = torch.load(v1_path, weights_only=True)
+            if verbose:
+                print(f"Loaded pre-trained networks from {pretrained_path} for warm-starting")
+        else:
+            warnings.warn(f"Pre-trained networks not found at {pretrained_path}, using random init")
+    
     # Track evaluations
     eval_count = [0]
     
     # Define objective function (negative log-likelihood)
     def neg_log_likelihood(theta):
         eval_count[0] += 1
-        log_lik = compute_log_likelihood(theta, data, solver_params)
+        log_lik = compute_log_likelihood(
+            theta, data, solver_params,
+            v0_init_state=v0_init_state,
+            v1_init_state=v1_init_state,
+        )
         if verbose and eval_count[0] % 10 == 0:
             print(f"Eval {eval_count[0]}: theta={theta}, LL={log_lik:.2f}")
         return -log_lik
@@ -203,11 +234,13 @@ def estimate_mle(
     theta_hat = result.x
     log_lik_hat = -result.fun
     
-    # Compute standard errors
+    # Compute standard errors (also use warm-start)
     if verbose:
         print("Computing standard errors...")
     std_errors, cov_matrix = compute_standard_errors(
-        theta_hat, data, solver_params
+        theta_hat, data, solver_params,
+        v0_init_state=v0_init_state,
+        v1_init_state=v1_init_state,
     )
     
     return EstimationResult(
@@ -228,6 +261,7 @@ def grid_search_mle(
     solver_params: Dict[str, Any],
     verbose: bool = True,
     compute_se: bool = True,
+    pretrained_path: Optional[str] = None,
 ) -> EstimationResult:
     """Estimate structural parameters via grid search.
     
@@ -248,12 +282,29 @@ def grid_search_mle(
         Print progress during search (default True)
     compute_se : bool
         Whether to compute standard errors at best point (default True)
+    pretrained_path : str, optional
+        Path to directory containing pre-trained networks (v0_net.pt, v1_net.pt).
+        If provided, uses these as warm-start initialization for all solver calls.
     
     Returns
     -------
     EstimationResult
         Estimation results including estimates and optionally standard errors
     """
+    # Load pre-trained networks for warm-starting (if provided)
+    v0_init_state = None
+    v1_init_state = None
+    if pretrained_path is not None:
+        v0_path = os.path.join(pretrained_path, 'v0_net.pt')
+        v1_path = os.path.join(pretrained_path, 'v1_net.pt')
+        if os.path.exists(v0_path) and os.path.exists(v1_path):
+            v0_init_state = torch.load(v0_path, weights_only=True)
+            v1_init_state = torch.load(v1_path, weights_only=True)
+            if verbose:
+                print(f"Loaded pre-trained networks from {pretrained_path} for warm-starting")
+        else:
+            warnings.warn(f"Pre-trained networks not found at {pretrained_path}, using random init")
+    
     # Create grid for each parameter
     beta_grid = np.linspace(bounds['beta'][0], bounds['beta'][1], n_points)
     gamma_grid = np.linspace(bounds['gamma'][0], bounds['gamma'][1], n_points)
@@ -281,8 +332,12 @@ def grid_search_mle(
                 eval_count += 1
                 theta = np.array([beta, gamma, delta])
                 
-                # Compute log-likelihood
-                ll = compute_log_likelihood(theta, data, solver_params)
+                # Compute log-likelihood (with warm-start)
+                ll = compute_log_likelihood(
+                    theta, data, solver_params,
+                    v0_init_state=v0_init_state,
+                    v1_init_state=v1_init_state,
+                )
                 results.append({'theta': theta, 'log_likelihood': ll})
                 
                 # Track best
@@ -298,12 +353,14 @@ def grid_search_mle(
         print(f"  Best theta: beta={best_theta[0]:.4f}, gamma={best_theta[1]:.4f}, delta={best_theta[2]:.4f}")
         print(f"  Best LL: {best_ll:.2f}")
     
-    # Compute standard errors at best point (optional)
+    # Compute standard errors at best point (optional, with warm-start)
     if compute_se:
         if verbose:
             print("Computing standard errors...")
         std_errors, cov_matrix = compute_standard_errors(
-            best_theta, data, solver_params
+            best_theta, data, solver_params,
+            v0_init_state=v0_init_state,
+            v1_init_state=v1_init_state,
         )
     else:
         std_errors = np.full(3, np.nan)
@@ -336,6 +393,8 @@ def compute_standard_errors(
     data: PanelData,
     solver_params: Dict[str, Any],
     eps: float = 1e-4,
+    v0_init_state: Optional[dict] = None,
+    v1_init_state: Optional[dict] = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Compute standard errors via numerical Hessian.
     
@@ -352,6 +411,10 @@ def compute_standard_errors(
         Solver hyperparameters
     eps : float
         Step size for finite differences (default 1e-4)
+    v0_init_state : dict, optional
+        Initial state dict for v0 network (warm-start)
+    v1_init_state : dict, optional
+        Initial state dict for v1 network (warm-start)
     
     Returns
     -------
@@ -372,25 +435,29 @@ def compute_standard_errors(
             theta_pp = theta_hat.copy()
             theta_pp[i] += eps
             theta_pp[j] += eps
-            f_pp = compute_log_likelihood(theta_pp, data, solver_params)
+            f_pp = compute_log_likelihood(theta_pp, data, solver_params,
+                                          v0_init_state, v1_init_state)
             
             # f(θ + ei*eps - ej*eps)
             theta_pm = theta_hat.copy()
             theta_pm[i] += eps
             theta_pm[j] -= eps
-            f_pm = compute_log_likelihood(theta_pm, data, solver_params)
+            f_pm = compute_log_likelihood(theta_pm, data, solver_params,
+                                          v0_init_state, v1_init_state)
             
             # f(θ - ei*eps + ej*eps)
             theta_mp = theta_hat.copy()
             theta_mp[i] -= eps
             theta_mp[j] += eps
-            f_mp = compute_log_likelihood(theta_mp, data, solver_params)
+            f_mp = compute_log_likelihood(theta_mp, data, solver_params,
+                                          v0_init_state, v1_init_state)
             
             # f(θ - ei*eps - ej*eps)
             theta_mm = theta_hat.copy()
             theta_mm[i] -= eps
             theta_mm[j] -= eps
-            f_mm = compute_log_likelihood(theta_mm, data, solver_params)
+            f_mm = compute_log_likelihood(theta_mm, data, solver_params,
+                                          v0_init_state, v1_init_state)
             
             # Second derivative approximation
             hessian[i, j] = (f_pp - f_pm - f_mp + f_mm) / (4 * eps * eps)

@@ -374,6 +374,8 @@ def solve_value_function(
     tolerance: Scalar,
     max_iterations: int,
     target_update_freq: int = 100,
+    v0_init_state: dict = None,
+    v1_init_state: dict = None,
 ) -> Tuple[nn.Module, nn.Module, List[float], int]:
     """Solve for value functions using neural network iteration.
     
@@ -404,6 +406,10 @@ def solve_value_function(
         Maximum number of iterations
     target_update_freq : int
         How often to update target networks (default: 100)
+    v0_init_state : dict, optional
+        Initial state dict for v0 network (warm-start). If None, random init.
+    v1_init_state : dict, optional
+        Initial state dict for v1 network (warm-start). If None, random init.
         
     Returns
     -------
@@ -414,6 +420,12 @@ def solve_value_function(
     v0_net: nn.Module
     v1_net: nn.Module
     v0_net, v1_net = initialize_networks(hidden_sizes)
+    
+    # Warm-start: Load initial weights if provided
+    if v0_init_state is not None:
+        v0_net.load_state_dict(v0_init_state)
+    if v1_init_state is not None:
+        v1_net.load_state_dict(v1_init_state)
     
     # Initialize target networks (frozen copies, updated every T iterations)
     v0_target: nn.Module = copy_network(v0_net)
