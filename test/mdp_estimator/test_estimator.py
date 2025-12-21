@@ -19,6 +19,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
 from mdp_estimator import (
     EstimationResult,
+    TwoStepResult,
+    estimate_gamma_ols,
+    estimate_beta_1d,
+    estimate_two_step,
     compute_log_likelihood,
     estimate_mle,
     grid_search_mle,
@@ -176,6 +180,130 @@ class TestEstimationResultStructure:
         assert isinstance(result.log_likelihood, float)
         assert isinstance(result.n_iterations, int)
         assert isinstance(result.converged, bool)
+
+
+class TestTwoStepResultStructure:
+    """Unit tests for TwoStepResult data structure."""
+    
+    def test_two_step_result_fields(self):
+        """TwoStepResult should have all required fields."""
+        result = TwoStepResult(
+            beta_hat=1.0,
+            gamma_hat=0.1,
+            delta_calibrated=0.95,
+            beta_se=0.05,
+            gamma_se=0.001,
+            log_likelihood=-100.0,
+            n_evaluations=20,
+            gamma_ols_details={'n_obs': 1000, 'r_squared': 1.0},
+        )
+        
+        assert isinstance(result.beta_hat, float)
+        assert isinstance(result.gamma_hat, float)
+        assert isinstance(result.delta_calibrated, float)
+        assert isinstance(result.beta_se, float)
+        assert isinstance(result.gamma_se, float)
+        assert isinstance(result.log_likelihood, float)
+        assert isinstance(result.n_evaluations, int)
+        assert isinstance(result.gamma_ols_details, dict)
+
+
+class TestEstimateGammaOLS:
+    """Unit tests for estimate_gamma_ols (fast - no solver needed).
+    
+    Uses synthetic data with known gamma to verify OLS estimation.
+    """
+    
+    @pytest.fixture
+    def synthetic_transition_data(self):
+        """Create synthetic panel data with known gamma = 0.1."""
+        np.random.seed(42)
+        n_agents, n_periods = 50, 20
+        gamma_true = 0.1
+        
+        # Generate states following s_{t+1} = (1 - gamma) * s_t + a_t
+        states = np.zeros((n_agents, n_periods))
+        actions = np.random.randint(0, 2, size=(n_agents, n_periods))
+        states[:, 0] = np.random.uniform(1, 10, size=n_agents)  # Initial states > 0
+        
+        for t in range(n_periods - 1):
+            states[:, t + 1] = (1 - gamma_true) * states[:, t] + actions[:, t]
+        
+        return PanelData(
+            states=states,
+            actions=actions,
+            rewards=np.zeros((n_agents, n_periods)),  # Not used for gamma estimation
+            n_agents=n_agents,
+            n_periods=n_periods,
+        ), gamma_true
+    
+    def test_recovers_true_gamma(self, synthetic_transition_data):
+        """OLS should exactly recover gamma from deterministic transitions."""
+        data, gamma_true = synthetic_transition_data
+        
+        gamma_hat, std_error, details = estimate_gamma_ols(data)
+        
+        # Should recover exactly (within numerical precision)
+        np.testing.assert_allclose(
+            gamma_hat, gamma_true, rtol=1e-10,
+            err_msg=f"gamma_hat={gamma_hat} should equal gamma_true={gamma_true}"
+        )
+    
+    def test_r_squared_equals_one(self, synthetic_transition_data):
+        """R-squared should be 1.0 for deterministic transitions."""
+        data, _ = synthetic_transition_data
+        
+        gamma_hat, std_error, details = estimate_gamma_ols(data)
+        
+        np.testing.assert_allclose(
+            details['r_squared'], 1.0, rtol=1e-10,
+            err_msg="R-squared should be 1.0 for deterministic transitions"
+        )
+    
+    def test_std_error_near_zero(self, synthetic_transition_data):
+        """Standard error should be near zero for deterministic transitions."""
+        data, _ = synthetic_transition_data
+        
+        gamma_hat, std_error, details = estimate_gamma_ols(data)
+        
+        assert std_error < 1e-10, "Standard error should be near zero"
+    
+    def test_returns_correct_n_obs(self, synthetic_transition_data):
+        """Should return correct number of observations."""
+        data, _ = synthetic_transition_data
+        
+        gamma_hat, std_error, details = estimate_gamma_ols(data)
+        
+        # n_obs should be n_agents * (n_periods - 1) minus any filtered zeros
+        expected_max = data.n_agents * (data.n_periods - 1)
+        assert details['n_obs'] <= expected_max
+        assert details['n_obs'] > 0
+    
+    def test_handles_different_gamma_values(self):
+        """Should work for various gamma values."""
+        np.random.seed(42)
+        
+        for gamma_true in [0.05, 0.1, 0.2, 0.5]:
+            n_agents, n_periods = 20, 10
+            states = np.zeros((n_agents, n_periods))
+            actions = np.random.randint(0, 2, size=(n_agents, n_periods))
+            states[:, 0] = np.random.uniform(1, 10, size=n_agents)
+            
+            for t in range(n_periods - 1):
+                states[:, t + 1] = (1 - gamma_true) * states[:, t] + actions[:, t]
+            
+            data = PanelData(
+                states=states, actions=actions,
+                rewards=np.zeros((n_agents, n_periods)),
+                n_agents=n_agents, n_periods=n_periods,
+            )
+            
+            gamma_hat, _, _ = estimate_gamma_ols(data)
+            
+            np.testing.assert_allclose(
+                gamma_hat, gamma_true, rtol=1e-10,
+                err_msg=f"Failed to recover gamma={gamma_true}"
+            )
 
 
 # =============================================================================
@@ -371,3 +499,141 @@ class TestGridSearch:
         # Verify it has the highest likelihood
         all_lls = [e['log_likelihood'] for e in grid_results['evaluations']]
         assert result.log_likelihood == max(all_lls), "Should return max likelihood point"
+
+
+@pytest.mark.slow
+class TestEstimateBeta1D:
+    """Integration tests for estimate_beta_1d (requires solver)."""
+    
+    def test_returns_correct_types(self, simulated_data, true_params, solver_params):
+        """estimate_beta_1d should return correct types."""
+        beta_hat, std_error, log_lik, details = estimate_beta_1d(
+            data=simulated_data,
+            gamma_fixed=true_params['gamma'],
+            delta_fixed=true_params['delta'],
+            solver_params=solver_params,
+            beta_bounds=(0.5, 1.5),
+            n_points=3,
+            verbose=False,
+        )
+        
+        assert isinstance(beta_hat, float), "beta_hat should be float"
+        assert isinstance(std_error, (float, type(np.nan))), "std_error should be float or nan"
+        assert isinstance(log_lik, float), "log_lik should be float"
+        assert isinstance(details, dict), "details should be dict"
+    
+    def test_beta_in_bounds(self, simulated_data, true_params, solver_params):
+        """Estimated beta should be within specified bounds."""
+        beta_bounds = (0.5, 1.5)
+        
+        beta_hat, _, _, _ = estimate_beta_1d(
+            data=simulated_data,
+            gamma_fixed=true_params['gamma'],
+            delta_fixed=true_params['delta'],
+            solver_params=solver_params,
+            beta_bounds=beta_bounds,
+            n_points=3,
+            verbose=False,
+        )
+        
+        assert beta_bounds[0] <= beta_hat <= beta_bounds[1], \
+            f"beta_hat={beta_hat} should be in {beta_bounds}"
+    
+    def test_finds_true_beta_on_grid(self, simulated_data, true_params, solver_params):
+        """When true beta is on grid, should find it."""
+        # Use bounds that include true beta as a grid point
+        true_beta = true_params['beta']
+        
+        beta_hat, _, _, _ = estimate_beta_1d(
+            data=simulated_data,
+            gamma_fixed=true_params['gamma'],
+            delta_fixed=true_params['delta'],
+            solver_params=solver_params,
+            beta_bounds=(true_beta - 0.5, true_beta + 0.5),
+            n_points=5,  # Grid: [0.5, 0.75, 1.0, 1.25, 1.5] includes 1.0
+            verbose=False,
+        )
+        
+        # Should find true beta or very close
+        assert abs(beta_hat - true_beta) < 0.3, \
+            f"beta_hat={beta_hat} should be close to true_beta={true_beta}"
+
+
+@pytest.mark.slow
+class TestEstimateTwoStep:
+    """Integration tests for estimate_two_step (requires solver)."""
+    
+    def test_returns_two_step_result(self, simulated_data, true_params, solver_params):
+        """estimate_two_step should return TwoStepResult object."""
+        result = estimate_two_step(
+            data=simulated_data,
+            delta_calibrated=true_params['delta'],
+            solver_params=solver_params,
+            beta_bounds=(0.5, 1.5),
+            n_points=3,
+            verbose=False,
+        )
+        
+        assert isinstance(result, TwoStepResult), "Should return TwoStepResult"
+    
+    def test_gamma_exactly_recovered(self, simulated_data, true_params, solver_params):
+        """Gamma should be exactly recovered from OLS."""
+        result = estimate_two_step(
+            data=simulated_data,
+            delta_calibrated=true_params['delta'],
+            solver_params=solver_params,
+            beta_bounds=(0.5, 1.5),
+            n_points=3,
+            verbose=False,
+        )
+        
+        # Gamma should be exactly recovered
+        np.testing.assert_allclose(
+            result.gamma_hat, true_params['gamma'], rtol=1e-6,
+            err_msg=f"gamma_hat={result.gamma_hat} should equal true gamma={true_params['gamma']}"
+        )
+    
+    def test_delta_equals_calibrated(self, simulated_data, true_params, solver_params):
+        """Delta should equal the calibrated value."""
+        result = estimate_two_step(
+            data=simulated_data,
+            delta_calibrated=true_params['delta'],
+            solver_params=solver_params,
+            beta_bounds=(0.5, 1.5),
+            n_points=3,
+            verbose=False,
+        )
+        
+        assert result.delta_calibrated == true_params['delta'], \
+            "delta_calibrated should equal the input value"
+    
+    def test_beta_reasonable(self, simulated_data, true_params, solver_params):
+        """Beta estimate should be in reasonable range."""
+        result = estimate_two_step(
+            data=simulated_data,
+            delta_calibrated=true_params['delta'],
+            solver_params=solver_params,
+            beta_bounds=(0.5, 1.5),
+            n_points=5,
+            verbose=False,
+        )
+        
+        # Beta should be positive and in bounds
+        assert 0.5 <= result.beta_hat <= 1.5, \
+            f"beta_hat={result.beta_hat} should be in [0.5, 1.5]"
+    
+    def test_full_recovery_with_fine_grid(self, simulated_data, true_params, solver_params):
+        """With fine grid and true delta, should recover beta well."""
+        result = estimate_two_step(
+            data=simulated_data,
+            delta_calibrated=true_params['delta'],
+            solver_params=solver_params,
+            beta_bounds=(0.8, 1.2),  # Narrow bounds around true value
+            n_points=5,
+            verbose=False,
+        )
+        
+        # Should recover beta close to true value
+        bias = abs(result.beta_hat - true_params['beta'])
+        assert bias < 0.15, \
+            f"beta bias={bias} should be < 0.15 (beta_hat={result.beta_hat}, true={true_params['beta']})"

@@ -1,9 +1,11 @@
 """MDP Structural Parameter Estimator using NFXP.
 
 This module implements:
+- estimate_gamma_ols: Estimate γ directly from transition data (OLS)
+- estimate_beta_1d: Estimate β with γ from OLS and δ calibrated (1D grid search)
 - compute_log_likelihood: Compute log-likelihood for candidate parameters
-- estimate_mle: Estimation using Nelder-Mead optimization
-- grid_search_mle: Estimation using explicit grid search
+- estimate_mle: Estimation using Nelder-Mead optimization (joint, not recommended)
+- grid_search_mle: Estimation using explicit grid search (joint, not recommended)
 - compute_standard_errors: Numerical Hessian-based standard errors
 """
 
@@ -51,6 +53,325 @@ class EstimationResult:
     n_iterations: int
     converged: bool
     optimization_result: Any
+
+
+@dataclass
+class TwoStepResult:
+    """Container for two-step estimation results.
+    
+    Attributes
+    ----------
+    beta_hat : float
+        Estimated reward coefficient
+    gamma_hat : float
+        Estimated state decay rate (from OLS)
+    delta_calibrated : float
+        Calibrated discount factor (fixed)
+    beta_se : float
+        Standard error for beta
+    gamma_se : float
+        Standard error for gamma (from OLS)
+    log_likelihood : float
+        Log-likelihood at the optimum
+    n_evaluations : int
+        Number of likelihood evaluations for beta
+    gamma_ols_details : dict
+        Details from gamma OLS estimation
+    """
+    beta_hat: float
+    gamma_hat: float
+    delta_calibrated: float
+    beta_se: float
+    gamma_se: float
+    log_likelihood: float
+    n_evaluations: int
+    gamma_ols_details: dict
+
+
+# =============================================================================
+# Two-Step Estimation (Recommended)
+# =============================================================================
+
+def estimate_gamma_ols(data: PanelData) -> Tuple[float, float, dict]:
+    """Estimate γ directly from observed state transitions using OLS.
+    
+    The transition equation is deterministic:
+        s_{t+1} = (1 - γ) * s_t + a_t
+    
+    Rearranging:
+        (s_{t+1} - a_t) = (1 - γ) * s_t
+    
+    This is a regression through the origin: Y = (1 - γ) * X
+    
+    Parameters
+    ----------
+    data : PanelData
+        Panel data with states and actions arrays
+    
+    Returns
+    -------
+    gamma_hat : float
+        Estimated decay rate
+    std_error : float
+        Standard error of the estimate
+    details : dict
+        Additional details (n_obs, r_squared, residual_std)
+    """
+    # Extract current states, next states, and actions
+    # states has shape (n_agents, n_periods), we need transitions
+    s_current = data.states[:, :-1].flatten()    # s_t (exclude last period)
+    s_next = data.states[:, 1:].flatten()        # s_{t+1} (exclude first period)
+    a_current = data.actions[:, :-1].flatten()   # a_t (exclude last period)
+    
+    # Construct regression variables
+    Y = s_next - a_current    # Dependent variable: s_{t+1} - a_t
+    X = s_current             # Independent variable: s_t
+    
+    # Filter out observations where s_t ≈ 0 (avoid division issues)
+    valid = X > 1e-6
+    Y = Y[valid]
+    X = X[valid]
+    n_obs = len(X)
+    
+    # OLS through origin: coef = Σ(X*Y) / Σ(X²)
+    # This estimates (1 - γ)
+    coef = np.sum(X * Y) / np.sum(X ** 2)
+    gamma_hat = 1.0 - coef
+    
+    # Compute residuals and standard error
+    residuals = Y - coef * X
+    residual_ss = np.sum(residuals ** 2)
+    mse = residual_ss / (n_obs - 1)  # Mean squared error (df = n - 1 for intercept-free)
+    
+    # Variance of coefficient: Var(coef) = σ² / Σ(X²)
+    var_coef = mse / np.sum(X ** 2)
+    std_error = np.sqrt(var_coef)  # SE for (1-γ), same magnitude as SE for γ
+    
+    # R-squared (for regression through origin)
+    total_ss = np.sum(Y ** 2)  # Note: no mean subtraction for origin regression
+    r_squared = 1.0 - residual_ss / total_ss if total_ss > 0 else 0.0
+    
+    details = {
+        'n_obs': n_obs,
+        'coef_1_minus_gamma': coef,
+        'residual_std': np.sqrt(mse),
+        'r_squared': r_squared,
+    }
+    
+    return gamma_hat, std_error, details
+
+
+def estimate_beta_1d(
+    data: PanelData,
+    gamma_fixed: float,
+    delta_fixed: float,
+    solver_params: Dict[str, Any],
+    beta_bounds: Tuple[float, float] = (0.1, 3.0),
+    n_points: int = 20,
+    verbose: bool = True,
+    pretrained_path: Optional[str] = None,
+) -> Tuple[float, float, float, dict]:
+    """Estimate β via 1D grid search with γ and δ fixed.
+    
+    Parameters
+    ----------
+    data : PanelData
+        Panel data with states and actions arrays
+    gamma_fixed : float
+        Fixed γ value (from OLS estimation)
+    delta_fixed : float
+        Fixed δ value (calibrated)
+    solver_params : dict
+        Solver hyperparameters
+    beta_bounds : tuple
+        (min, max) bounds for β grid search
+    n_points : int
+        Number of grid points for β (default 20)
+    verbose : bool
+        Print progress (default True)
+    pretrained_path : str, optional
+        Path to pre-trained networks for warm-start
+    
+    Returns
+    -------
+    beta_hat : float
+        Estimated β
+    std_error : float
+        Standard error of β estimate
+    log_likelihood : float
+        Log-likelihood at optimum
+    details : dict
+        Grid search details (all evaluations)
+    """
+    # Load pre-trained networks for warm-starting (if provided)
+    v0_init_state = None
+    v1_init_state = None
+    if pretrained_path is not None:
+        v0_path = os.path.join(pretrained_path, 'v0_net.pt')
+        v1_path = os.path.join(pretrained_path, 'v1_net.pt')
+        if os.path.exists(v0_path) and os.path.exists(v1_path):
+            v0_init_state = torch.load(v0_path, weights_only=True)
+            v1_init_state = torch.load(v1_path, weights_only=True)
+            if verbose:
+                print(f"Loaded pre-trained networks from {pretrained_path}")
+        else:
+            warnings.warn(f"Pre-trained networks not found at {pretrained_path}")
+    
+    # Create 1D grid for β
+    beta_grid = np.linspace(beta_bounds[0], beta_bounds[1], n_points)
+    
+    if verbose:
+        print(f"1D Grid search for β:")
+        print(f"  β in [{beta_bounds[0]:.3f}, {beta_bounds[1]:.3f}], {n_points} points")
+        print(f"  γ fixed at {gamma_fixed:.4f} (from OLS)")
+        print(f"  δ fixed at {delta_fixed:.4f} (calibrated)")
+    
+    # Store results
+    results = []
+    best_ll = -np.inf
+    best_beta = None
+    
+    # Search over grid
+    for i, beta in enumerate(beta_grid):
+        theta = np.array([beta, gamma_fixed, delta_fixed])
+        
+        ll = compute_log_likelihood(
+            theta, data, solver_params,
+            v0_init_state=v0_init_state,
+            v1_init_state=v1_init_state,
+        )
+        results.append({'beta': beta, 'log_likelihood': ll})
+        
+        if ll > best_ll:
+            best_ll = ll
+            best_beta = beta
+        
+        if verbose:
+            print(f"  [{i+1}/{n_points}] β={beta:.4f}, LL={ll:.2f}" + 
+                  (" *" if beta == best_beta else ""))
+    
+    if verbose:
+        print(f"\nBest: β={best_beta:.4f}, LL={best_ll:.2f}")
+    
+    # Compute standard error for β via numerical second derivative
+    # d²L/dβ² approximated by central differences
+    eps = 0.01
+    theta_plus = np.array([best_beta + eps, gamma_fixed, delta_fixed])
+    theta_minus = np.array([best_beta - eps, gamma_fixed, delta_fixed])
+    theta_center = np.array([best_beta, gamma_fixed, delta_fixed])
+    
+    ll_plus = compute_log_likelihood(theta_plus, data, solver_params,
+                                     v0_init_state, v1_init_state)
+    ll_minus = compute_log_likelihood(theta_minus, data, solver_params,
+                                      v0_init_state, v1_init_state)
+    ll_center = compute_log_likelihood(theta_center, data, solver_params,
+                                       v0_init_state, v1_init_state)
+    
+    # Second derivative: (f(x+h) - 2f(x) + f(x-h)) / h²
+    d2_ll = (ll_plus - 2 * ll_center + ll_minus) / (eps ** 2)
+    
+    # Standard error: sqrt(-1 / d²L/dβ²)
+    if d2_ll < 0:
+        std_error = np.sqrt(-1.0 / d2_ll)
+    else:
+        warnings.warn("Second derivative is non-negative, SE may be invalid")
+        std_error = np.nan
+    
+    details = {
+        'beta_grid': beta_grid,
+        'evaluations': results,
+        'n_evaluations': n_points + 3,  # grid + 3 for SE computation
+    }
+    
+    return best_beta, std_error, best_ll, details
+
+
+def estimate_two_step(
+    data: PanelData,
+    delta_calibrated: float,
+    solver_params: Dict[str, Any],
+    beta_bounds: Tuple[float, float] = (0.1, 3.0),
+    n_points: int = 20,
+    verbose: bool = True,
+    pretrained_path: Optional[str] = None,
+) -> TwoStepResult:
+    """Two-step structural estimation.
+    
+    Step 1: Estimate γ from transition data (OLS)
+    Step 2: Estimate β via 1D grid search with γ and δ fixed
+    
+    Parameters
+    ----------
+    data : PanelData
+        Panel data with states and actions arrays
+    delta_calibrated : float
+        Calibrated discount factor (fixed at this value)
+    solver_params : dict
+        Solver hyperparameters
+    beta_bounds : tuple
+        (min, max) bounds for β grid search
+    n_points : int
+        Number of grid points for β
+    verbose : bool
+        Print progress
+    pretrained_path : str, optional
+        Path to pre-trained networks for warm-start
+    
+    Returns
+    -------
+    TwoStepResult
+        Complete estimation results
+    """
+    if verbose:
+        print("=" * 60)
+        print("TWO-STEP ESTIMATION")
+        print("=" * 60)
+    
+    # Step 1: Estimate γ from transitions
+    if verbose:
+        print("\n--- Step 1: Estimate γ from transitions (OLS) ---")
+    
+    gamma_hat, gamma_se, gamma_details = estimate_gamma_ols(data)
+    
+    if verbose:
+        print(f"  γ_hat = {gamma_hat:.6f} (SE = {gamma_se:.6f})")
+        print(f"  R² = {gamma_details['r_squared']:.6f}")
+        print(f"  N obs = {gamma_details['n_obs']}")
+    
+    # Step 2: Estimate β with γ and δ fixed
+    if verbose:
+        print(f"\n--- Step 2: Estimate β (γ={gamma_hat:.4f}, δ={delta_calibrated:.4f} fixed) ---")
+    
+    beta_hat, beta_se, log_lik, beta_details = estimate_beta_1d(
+        data=data,
+        gamma_fixed=gamma_hat,
+        delta_fixed=delta_calibrated,
+        solver_params=solver_params,
+        beta_bounds=beta_bounds,
+        n_points=n_points,
+        verbose=verbose,
+        pretrained_path=pretrained_path,
+    )
+    
+    if verbose:
+        print("\n" + "=" * 60)
+        print("ESTIMATION COMPLETE")
+        print("=" * 60)
+        print(f"  β_hat = {beta_hat:.4f} (SE = {beta_se:.4f})")
+        print(f"  γ_hat = {gamma_hat:.4f} (SE = {gamma_se:.6f})")
+        print(f"  δ     = {delta_calibrated:.4f} (calibrated)")
+        print(f"  Log-likelihood = {log_lik:.2f}")
+    
+    return TwoStepResult(
+        beta_hat=beta_hat,
+        gamma_hat=gamma_hat,
+        delta_calibrated=delta_calibrated,
+        beta_se=beta_se,
+        gamma_se=gamma_se,
+        log_likelihood=log_lik,
+        n_evaluations=beta_details['n_evaluations'],
+        gamma_ols_details=gamma_details,
+    )
 
 
 # =============================================================================

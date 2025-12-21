@@ -90,11 +90,154 @@ From `src/mdp_solver`, we have:
 | `build_monotonic_network(hidden_sizes)` | Creates network architecture |
 | `evaluate_network(net, s)` | Evaluates value function at states |
 
-### Algorithm: NFXP-NN Estimator
+### Algorithm: Two-Step NFXP-NN Estimator
 
-We use derivative-free optimization (Nelder-Mead) for the outer loop, which is well-suited for our 3-parameter problem. The optimizer evaluates the negative log-likelihood at candidate parameter values, where each evaluation requires solving the full dynamic programming problem.
+Due to weak identification between parameters when estimating all three simultaneously, we adopt a **two-step approach**:
 
-#### Pseudocode: Main Estimation Routine
+1. **Step 1**: Estimate $\gamma$ directly from transition data (OLS, no optimization needed)
+2. **Step 2**: Estimate $(\beta, \delta)$ via grid search with $\gamma$ fixed
+
+This exploits the fact that $\gamma$ enters only the deterministic transition equation, while $(\beta, \delta)$ enter the value function through the Bellman equation.
+
+#### Pseudocode: Step 1 - Estimate γ from Transitions (OLS)
+
+```
+FUNCTION ESTIMATE_GAMMA_OLS(data):
+    """
+    Estimate γ directly from observed state transitions using OLS.
+    
+    The transition equation is deterministic:
+        s_{t+1} = (1 - γ) * s_t + a_t
+    
+    Rearranging:
+        (s_{t+1} - a_t) = (1 - γ) * s_t
+    
+    This is a regression through the origin:
+        Y = (1 - γ) * X
+    where Y = s_{t+1} - a_t, X = s_t
+    
+    Inputs:
+        data: PanelData object containing:
+            - states: np.ndarray of shape (n_agents, n_periods)
+            - actions: np.ndarray of shape (n_agents, n_periods)
+    
+    Outputs:
+        gamma_hat: float, estimated decay rate
+        std_error: float, standard error of estimate
+    """
+    
+    # Extract current states, next states, and actions
+    s_current = data.states[:, :-1].flatten()    # s_t (exclude last period)
+    s_next = data.states[:, 1:].flatten()        # s_{t+1} (exclude first period)
+    a_current = data.actions[:, :-1].flatten()   # a_t (exclude last period)
+    
+    # Construct regression variables
+    Y = s_next - a_current    # Dependent variable
+    X = s_current             # Independent variable (regressor)
+    
+    # Filter out observations where s_t = 0 (division issue)
+    valid = X > 1e-6
+    Y = Y[valid]
+    X = X[valid]
+    
+    # OLS through origin: β = (X'X)^{-1} X'Y = Σ(X*Y) / Σ(X²)
+    coef = np.sum(X * Y) / np.sum(X ** 2)  # This estimates (1 - γ)
+    gamma_hat = 1 - coef
+    
+    # Compute standard error
+    residuals = Y - coef * X
+    n = len(X)
+    mse = np.sum(residuals ** 2) / (n - 1)  # Mean squared error
+    var_coef = mse / np.sum(X ** 2)         # Variance of coefficient
+    std_error = np.sqrt(var_coef)            # SE for (1-γ), same as SE for γ
+    
+    RETURN gamma_hat, std_error
+```
+
+#### Pseudocode: Step 2 - Grid Search for (β, δ) with γ Fixed
+
+```
+FUNCTION ESTIMATE_BETA_DELTA_GRID(data, gamma_fixed, solver_params, bounds, n_points):
+    """
+    Estimate (β, δ) via 2D grid search with γ fixed.
+    
+    Inputs:
+        data: PanelData object
+        gamma_fixed: float, pre-estimated γ from Step 1
+        solver_params: dict with solver hyperparameters
+        bounds: dict with {'beta': (lo, hi), 'delta': (lo, hi)}
+        n_points: int, grid points per dimension
+    
+    Outputs:
+        beta_hat: float, estimated reward coefficient
+        delta_hat: float, estimated discount factor
+        log_likelihood: float, maximized log-likelihood
+    """
+    
+    # Create 2D grid
+    beta_grid = np.linspace(bounds['beta'][0], bounds['beta'][1], n_points)
+    delta_grid = np.linspace(bounds['delta'][0], bounds['delta'][1], n_points)
+    
+    best_ll = -np.inf
+    best_beta = None
+    best_delta = None
+    
+    # Search over grid
+    FOR beta IN beta_grid:
+        FOR delta IN delta_grid:
+            theta = (beta, gamma_fixed, delta)
+            ll = COMPUTE_LOG_LIKELIHOOD(theta, data, solver_params)
+            
+            IF ll > best_ll:
+                best_ll = ll
+                best_beta = beta
+                best_delta = delta
+    
+    RETURN best_beta, best_delta, best_ll
+```
+
+#### Pseudocode: Main Two-Step Estimation Routine
+
+```
+FUNCTION ESTIMATE_TWO_STEP(data, solver_params, bounds, n_points):
+    """
+    Two-step structural estimation.
+    
+    Step 1: Estimate γ from transition data (OLS)
+    Step 2: Estimate (β, δ) via grid search with γ fixed
+    
+    Inputs:
+        data: PanelData object
+        solver_params: dict with solver hyperparameters
+        bounds: dict with parameter bounds
+        n_points: int, grid points per dimension for (β, δ)
+    
+    Outputs:
+        theta_hat: tuple (beta_hat, gamma_hat, delta_hat)
+        results: dict with estimation details
+    """
+    
+    # Step 1: Estimate γ from transitions
+    gamma_hat, gamma_se = ESTIMATE_GAMMA_OLS(data)
+    PRINT "Step 1: γ_hat =", gamma_hat, "± ", gamma_se
+    
+    # Step 2: Estimate (β, δ) with γ fixed
+    beta_hat, delta_hat, log_lik = ESTIMATE_BETA_DELTA_GRID(
+        data, gamma_hat, solver_params, bounds, n_points
+    )
+    PRINT "Step 2: β_hat =", beta_hat, ", δ_hat =", delta_hat
+    
+    theta_hat = (beta_hat, gamma_hat, delta_hat)
+    RETURN theta_hat, {'gamma_se': gamma_se, 'log_likelihood': log_lik}
+```
+
+---
+
+### Alternative: Joint 3-Parameter Estimation (For Reference)
+
+The following pseudocode shows joint estimation of all three parameters, which suffers from identification issues as demonstrated above.
+
+#### Pseudocode: Joint Estimation (Not Recommended)
 
 ```
 FUNCTION ESTIMATE_MLE(data, theta_init, solver_params, bounds):
@@ -701,4 +844,263 @@ result = estimate_mle(data, theta_init, solver_params)
 print(f"True:      β={beta:.3f}, γ={gamma:.3f}, δ={delta:.3f}")
 print(f"Estimated: β={result.theta_hat[0]:.3f}, γ={result.theta_hat[1]:.3f}, δ={result.theta_hat[2]:.3f}")
 print(f"Std Err:   ({result.std_errors[0]:.3f}, {result.std_errors[1]:.3f}, {result.std_errors[2]:.3f})")
+```
+
+## Implementation
+
+### Setup
+
+```{python}
+#| label: setup
+#| code-fold: true
+
+import sys
+import json
+import numpy as np
+import torch
+
+# Add paths for local modules
+sys.path.insert(0, '../../src')
+sys.path.insert(0, '../config_mdp')
+
+# Import configuration
+from config import (
+    beta as true_beta,
+    gamma as true_gamma,
+    delta as true_delta,
+    s_min, s_max,
+    hidden_sizes,
+    learning_rate,
+    batch_size,
+    tolerance,
+    max_iterations,
+    target_update_freq,
+)
+
+# Import estimator
+from mdp_estimator import grid_search_mle, EstimationResult
+from mdp_simulator import PanelData
+
+# Paths
+SIMULATE_OUTPUT_PATH = '../../output/simulate_mdp'
+SOLVER_OUTPUT_PATH = '../../output/solve_mdp'
+
+print("Setup complete.")
+print(f"True parameters: β={true_beta}, γ={true_gamma}, δ={true_delta}")
+```
+
+### Load Simulated Data
+
+```{python}
+#| label: load-data
+
+# Load simulated panel data
+states = np.load(f'{SIMULATE_OUTPUT_PATH}/states.npy')
+actions = np.load(f'{SIMULATE_OUTPUT_PATH}/actions.npy')
+rewards = np.load(f'{SIMULATE_OUTPUT_PATH}/rewards.npy')
+
+# Load simulation config
+with open(f'{SIMULATE_OUTPUT_PATH}/config.json', 'r') as f:
+    sim_config = json.load(f)
+
+n_agents = states.shape[0]
+n_periods = states.shape[1]
+
+# Create PanelData object
+panel_data = PanelData(
+    states=states,
+    actions=actions,
+    rewards=rewards,
+    n_agents=n_agents,
+    n_periods=n_periods,
+)
+
+print(f"Loaded panel data:")
+print(f"  N agents:  {n_agents}")
+print(f"  T periods: {n_periods}")
+print(f"  Total observations: {n_agents * n_periods}")
+```
+
+### True Parameters (Ground Truth)
+
+```{python}
+#| label: true-params
+
+print("=" * 50)
+print("TRUE PARAMETERS (Data-Generating Process)")
+print("=" * 50)
+print(f"  β (reward coefficient):  {true_beta}")
+print(f"  γ (state decay rate):    {true_gamma}")
+print(f"  δ (discount factor):     {true_delta}")
+print("=" * 50)
+```
+
+### Grid Search Estimation
+
+```{python}
+#| label: grid-search
+
+# Solver parameters for inner loop
+solver_params = {
+    's_min': s_min,
+    's_max': s_max,
+    'hidden_sizes': hidden_sizes,
+    'learning_rate': learning_rate,
+    'batch_size': batch_size,
+    'tolerance': tolerance,
+    'max_iterations': max_iterations,
+    'target_update_freq': target_update_freq,
+}
+
+# Grid search bounds (centered around true values with reasonable range)
+bounds = {
+    'beta': (0.5, 1.5),      # True: 1.0
+    'gamma': (0.05, 0.20),   # True: 0.1
+    'delta': (0.90, 0.99),   # True: 0.95
+}
+
+# Number of grid points per dimension
+n_points = 5  # 5^3 = 125 evaluations
+
+print("Starting grid search estimation...")
+print(f"Grid: {n_points} points per dimension = {n_points**3} total evaluations")
+print(f"Using warm-start from: {SOLVER_OUTPUT_PATH}")
+print()
+
+# Run grid search with warm-start
+result = grid_search_mle(
+    data=panel_data,
+    bounds=bounds,
+    n_points=n_points,
+    solver_params=solver_params,
+    verbose=True,
+    compute_se=True,
+    pretrained_path=SOLVER_OUTPUT_PATH,
+)
+
+print("\nGrid search completed!")
+```
+
+### Estimation Results
+
+```{python}
+#| label: results
+
+import pandas as pd
+
+# Extract results
+beta_hat, gamma_hat, delta_hat = result.theta_hat
+se_beta, se_gamma, se_delta = result.std_errors
+
+# Create results table
+results_df = pd.DataFrame({
+    'Parameter': ['β (reward)', 'γ (decay)', 'δ (discount)'],
+    'True': [true_beta, true_gamma, true_delta],
+    'Estimated': [beta_hat, gamma_hat, delta_hat],
+    'Std. Error': [se_beta, se_gamma, se_delta],
+    'Bias': [beta_hat - true_beta, gamma_hat - true_gamma, delta_hat - true_delta],
+    'Bias (%)': [
+        100 * (beta_hat - true_beta) / true_beta,
+        100 * (gamma_hat - true_gamma) / true_gamma,
+        100 * (delta_hat - true_delta) / true_delta,
+    ],
+})
+
+print("=" * 60)
+print("ESTIMATION RESULTS")
+print("=" * 60)
+print(results_df.to_string(index=False))
+print("=" * 60)
+print(f"\nLog-likelihood at optimum: {result.log_likelihood:.2f}")
+print(f"Number of evaluations: {result.n_iterations}")
+```
+
+### Likelihood at True Parameters
+
+```{python}
+#| label: likelihood-check
+
+from mdp_estimator import compute_log_likelihood
+import torch
+import os
+
+# Load pre-trained networks for warm-start
+v0_init_state = torch.load(f'{SOLVER_OUTPUT_PATH}/v0_net.pt', weights_only=True)
+v1_init_state = torch.load(f'{SOLVER_OUTPUT_PATH}/v1_net.pt', weights_only=True)
+
+# Compute log-likelihood at TRUE parameters
+theta_true = np.array([true_beta, true_gamma, true_delta])
+
+print(f"Evaluating log-likelihood at true parameters: θ = {theta_true}")
+ll_true = compute_log_likelihood(
+    theta=theta_true,
+    data=panel_data,
+    solver_params=solver_params,
+    v0_init_state=v0_init_state,
+    v1_init_state=v1_init_state,
+)
+
+print(f"\nLog-likelihood comparison:")
+print(f"  At TRUE parameters (β={true_beta}, γ={true_gamma}, δ={true_delta}):  LL = {ll_true:.2f}")
+print(f"  At ESTIMATED parameters (β={beta_hat:.2f}, γ={gamma_hat:.2f}, δ={delta_hat:.2f}): LL = {result.log_likelihood:.2f}")
+print(f"  Difference: {ll_true - result.log_likelihood:.2f}")
+
+if ll_true > result.log_likelihood:
+    print("\n⚠ TRUE parameters have HIGHER likelihood!")
+    print("  → Grid search missed the true maximum (grid too coarse)")
+elif abs(ll_true - result.log_likelihood) < 10:
+    print("\n⚠ Likelihoods are SIMILAR (within 10 log-units)")
+    print("  → Likelihood surface is FLAT - identification issues")
+else:
+    print("\n✓ Estimated parameters have higher likelihood")
+    print("  → Model may be misspecified or data insufficient")
+```
+
+### Diagnostics
+
+```{python}
+#| label: diagnostics
+
+print("=" * 60)
+print("DIAGNOSTICS")
+print("=" * 60)
+
+# Check if estimates are within 2 standard errors of true values
+within_2se = []
+for i, (name, true_val, est_val, se) in enumerate([
+    ('β', true_beta, beta_hat, se_beta),
+    ('γ', true_gamma, gamma_hat, se_gamma),
+    ('δ', true_delta, delta_hat, se_delta),
+]):
+    if np.isnan(se):
+        status = "SE not available"
+        within = None
+    else:
+        diff = abs(est_val - true_val)
+        within = diff <= 2 * se
+        status = "✓ Yes" if within else "✗ No"
+    within_2se.append(within)
+    print(f"  {name}: |{est_val:.4f} - {true_val:.4f}| = {abs(est_val - true_val):.4f} "
+          f"{'<=' if within else '>'} 2×SE={2*se:.4f} → {status}")
+
+print()
+
+# Overall assessment
+n_covered = sum(1 for w in within_2se if w is True)
+n_total = sum(1 for w in within_2se if w is not None)
+
+if n_total > 0:
+    print(f"Coverage: {n_covered}/{n_total} parameters within 2 SE of true value")
+    if n_covered == n_total:
+        print("✓ All parameters recovered successfully!")
+    else:
+        print("⚠ Some parameters may have estimation issues.")
+else:
+    print("⚠ Standard errors not available for coverage assessment.")
+
+print()
+print("=" * 60)
+print("COVARIANCE MATRIX")
+print("=" * 60)
+print(result.cov_matrix)
 ```

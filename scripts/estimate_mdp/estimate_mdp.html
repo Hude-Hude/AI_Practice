@@ -127,7 +127,8 @@ window.Quarto = {
   <ul class="collapse">
   <li><a href="#key-insight" id="toc-key-insight" class="nav-link" data-scroll-target="#key-insight">Key Insight</a></li>
   <li><a href="#available-infrastructure" id="toc-available-infrastructure" class="nav-link" data-scroll-target="#available-infrastructure">Available Infrastructure</a></li>
-  <li><a href="#algorithm-nfxp-nn-estimator" id="toc-algorithm-nfxp-nn-estimator" class="nav-link" data-scroll-target="#algorithm-nfxp-nn-estimator">Algorithm: NFXP-NN Estimator</a></li>
+  <li><a href="#algorithm-two-step-nfxp-nn-estimator" id="toc-algorithm-two-step-nfxp-nn-estimator" class="nav-link" data-scroll-target="#algorithm-two-step-nfxp-nn-estimator">Algorithm: Two-Step NFXP-NN Estimator</a></li>
+  <li><a href="#alternative-joint-3-parameter-estimation-for-reference" id="toc-alternative-joint-3-parameter-estimation-for-reference" class="nav-link" data-scroll-target="#alternative-joint-3-parameter-estimation-for-reference">Alternative: Joint 3-Parameter Estimation (For Reference)</a></li>
   <li><a href="#why-nelder-mead" id="toc-why-nelder-mead" class="nav-link" data-scroll-target="#why-nelder-mead">Why Nelder-Mead</a></li>
   <li><a href="#computational-cost" id="toc-computational-cost" class="nav-link" data-scroll-target="#computational-cost">Computational Cost</a></li>
   </ul></li>
@@ -157,6 +158,16 @@ window.Quarto = {
   <li><a href="#step-1-create-estimator-module" id="toc-step-1-create-estimator-module" class="nav-link" data-scroll-target="#step-1-create-estimator-module">Step 1: Create Estimator Module</a></li>
   <li><a href="#step-2-add-tests" id="toc-step-2-add-tests" class="nav-link" data-scroll-target="#step-2-add-tests">Step 2: Add Tests</a></li>
   <li><a href="#step-3-integration-in-quarto-report" id="toc-step-3-integration-in-quarto-report" class="nav-link" data-scroll-target="#step-3-integration-in-quarto-report">Step 3: Integration in Quarto Report</a></li>
+  </ul></li>
+  <li><a href="#implementation" id="toc-implementation" class="nav-link" data-scroll-target="#implementation">Implementation</a>
+  <ul class="collapse">
+  <li><a href="#setup" id="toc-setup" class="nav-link" data-scroll-target="#setup">Setup</a></li>
+  <li><a href="#load-simulated-data" id="toc-load-simulated-data" class="nav-link" data-scroll-target="#load-simulated-data">Load Simulated Data</a></li>
+  <li><a href="#true-parameters-ground-truth" id="toc-true-parameters-ground-truth" class="nav-link" data-scroll-target="#true-parameters-ground-truth">True Parameters (Ground Truth)</a></li>
+  <li><a href="#grid-search-estimation" id="toc-grid-search-estimation" class="nav-link" data-scroll-target="#grid-search-estimation">Grid Search Estimation</a></li>
+  <li><a href="#estimation-results" id="toc-estimation-results" class="nav-link" data-scroll-target="#estimation-results">Estimation Results</a></li>
+  <li><a href="#likelihood-at-true-parameters" id="toc-likelihood-at-true-parameters" class="nav-link" data-scroll-target="#likelihood-at-true-parameters">Likelihood at True Parameters</a></li>
+  <li><a href="#diagnostics" id="toc-diagnostics" class="nav-link" data-scroll-target="#diagnostics">Diagnostics</a></li>
   </ul></li>
   </ul>
 </nav>
@@ -280,11 +291,147 @@ P(a = 1 | s; \theta) = \frac{\exp(v(s, 1; \theta))}{\exp(v(s, 0; \theta)) + \exp
 </tbody>
 </table>
 </section>
-<section id="algorithm-nfxp-nn-estimator" class="level3">
-<h3 class="anchored" data-anchor-id="algorithm-nfxp-nn-estimator">Algorithm: NFXP-NN Estimator</h3>
-<p>We use derivative-free optimization (Nelder-Mead) for the outer loop, which is well-suited for our 3-parameter problem. The optimizer evaluates the negative log-likelihood at candidate parameter values, where each evaluation requires solving the full dynamic programming problem.</p>
-<section id="pseudocode-main-estimation-routine" class="level4">
-<h4 class="anchored" data-anchor-id="pseudocode-main-estimation-routine">Pseudocode: Main Estimation Routine</h4>
+<section id="algorithm-two-step-nfxp-nn-estimator" class="level3">
+<h3 class="anchored" data-anchor-id="algorithm-two-step-nfxp-nn-estimator">Algorithm: Two-Step NFXP-NN Estimator</h3>
+<p>Due to weak identification between parameters when estimating all three simultaneously, we adopt a <strong>two-step approach</strong>:</p>
+<ol type="1">
+<li><strong>Step 1</strong>: Estimate <span class="math inline">\(\gamma\)</span> directly from transition data (OLS, no optimization needed)</li>
+<li><strong>Step 2</strong>: Estimate <span class="math inline">\((\beta, \delta)\)</span> via grid search with <span class="math inline">\(\gamma\)</span> fixed</li>
+</ol>
+<p>This exploits the fact that <span class="math inline">\(\gamma\)</span> enters only the deterministic transition equation, while <span class="math inline">\((\beta, \delta)\)</span> enter the value function through the Bellman equation.</p>
+<section id="pseudocode-step-1---estimate-γ-from-transitions-ols" class="level4">
+<h4 class="anchored" data-anchor-id="pseudocode-step-1---estimate-γ-from-transitions-ols">Pseudocode: Step 1 - Estimate γ from Transitions (OLS)</h4>
+<pre><code>FUNCTION ESTIMATE_GAMMA_OLS(data):
+    """
+    Estimate γ directly from observed state transitions using OLS.
+    
+    The transition equation is deterministic:
+        s_{t+1} = (1 - γ) * s_t + a_t
+    
+    Rearranging:
+        (s_{t+1} - a_t) = (1 - γ) * s_t
+    
+    This is a regression through the origin:
+        Y = (1 - γ) * X
+    where Y = s_{t+1} - a_t, X = s_t
+    
+    Inputs:
+        data: PanelData object containing:
+            - states: np.ndarray of shape (n_agents, n_periods)
+            - actions: np.ndarray of shape (n_agents, n_periods)
+    
+    Outputs:
+        gamma_hat: float, estimated decay rate
+        std_error: float, standard error of estimate
+    """
+    
+    # Extract current states, next states, and actions
+    s_current = data.states[:, :-1].flatten()    # s_t (exclude last period)
+    s_next = data.states[:, 1:].flatten()        # s_{t+1} (exclude first period)
+    a_current = data.actions[:, :-1].flatten()   # a_t (exclude last period)
+    
+    # Construct regression variables
+    Y = s_next - a_current    # Dependent variable
+    X = s_current             # Independent variable (regressor)
+    
+    # Filter out observations where s_t = 0 (division issue)
+    valid = X &gt; 1e-6
+    Y = Y[valid]
+    X = X[valid]
+    
+    # OLS through origin: β = (X'X)^{-1} X'Y = Σ(X*Y) / Σ(X²)
+    coef = np.sum(X * Y) / np.sum(X ** 2)  # This estimates (1 - γ)
+    gamma_hat = 1 - coef
+    
+    # Compute standard error
+    residuals = Y - coef * X
+    n = len(X)
+    mse = np.sum(residuals ** 2) / (n - 1)  # Mean squared error
+    var_coef = mse / np.sum(X ** 2)         # Variance of coefficient
+    std_error = np.sqrt(var_coef)            # SE for (1-γ), same as SE for γ
+    
+    RETURN gamma_hat, std_error</code></pre>
+</section>
+<section id="pseudocode-step-2---grid-search-for-β-δ-with-γ-fixed" class="level4">
+<h4 class="anchored" data-anchor-id="pseudocode-step-2---grid-search-for-β-δ-with-γ-fixed">Pseudocode: Step 2 - Grid Search for (β, δ) with γ Fixed</h4>
+<pre><code>FUNCTION ESTIMATE_BETA_DELTA_GRID(data, gamma_fixed, solver_params, bounds, n_points):
+    """
+    Estimate (β, δ) via 2D grid search with γ fixed.
+    
+    Inputs:
+        data: PanelData object
+        gamma_fixed: float, pre-estimated γ from Step 1
+        solver_params: dict with solver hyperparameters
+        bounds: dict with {'beta': (lo, hi), 'delta': (lo, hi)}
+        n_points: int, grid points per dimension
+    
+    Outputs:
+        beta_hat: float, estimated reward coefficient
+        delta_hat: float, estimated discount factor
+        log_likelihood: float, maximized log-likelihood
+    """
+    
+    # Create 2D grid
+    beta_grid = np.linspace(bounds['beta'][0], bounds['beta'][1], n_points)
+    delta_grid = np.linspace(bounds['delta'][0], bounds['delta'][1], n_points)
+    
+    best_ll = -np.inf
+    best_beta = None
+    best_delta = None
+    
+    # Search over grid
+    FOR beta IN beta_grid:
+        FOR delta IN delta_grid:
+            theta = (beta, gamma_fixed, delta)
+            ll = COMPUTE_LOG_LIKELIHOOD(theta, data, solver_params)
+            
+            IF ll &gt; best_ll:
+                best_ll = ll
+                best_beta = beta
+                best_delta = delta
+    
+    RETURN best_beta, best_delta, best_ll</code></pre>
+</section>
+<section id="pseudocode-main-two-step-estimation-routine" class="level4">
+<h4 class="anchored" data-anchor-id="pseudocode-main-two-step-estimation-routine">Pseudocode: Main Two-Step Estimation Routine</h4>
+<pre><code>FUNCTION ESTIMATE_TWO_STEP(data, solver_params, bounds, n_points):
+    """
+    Two-step structural estimation.
+    
+    Step 1: Estimate γ from transition data (OLS)
+    Step 2: Estimate (β, δ) via grid search with γ fixed
+    
+    Inputs:
+        data: PanelData object
+        solver_params: dict with solver hyperparameters
+        bounds: dict with parameter bounds
+        n_points: int, grid points per dimension for (β, δ)
+    
+    Outputs:
+        theta_hat: tuple (beta_hat, gamma_hat, delta_hat)
+        results: dict with estimation details
+    """
+    
+    # Step 1: Estimate γ from transitions
+    gamma_hat, gamma_se = ESTIMATE_GAMMA_OLS(data)
+    PRINT "Step 1: γ_hat =", gamma_hat, "± ", gamma_se
+    
+    # Step 2: Estimate (β, δ) with γ fixed
+    beta_hat, delta_hat, log_lik = ESTIMATE_BETA_DELTA_GRID(
+        data, gamma_hat, solver_params, bounds, n_points
+    )
+    PRINT "Step 2: β_hat =", beta_hat, ", δ_hat =", delta_hat
+    
+    theta_hat = (beta_hat, gamma_hat, delta_hat)
+    RETURN theta_hat, {'gamma_se': gamma_se, 'log_likelihood': log_lik}</code></pre>
+<hr>
+</section>
+</section>
+<section id="alternative-joint-3-parameter-estimation-for-reference" class="level3">
+<h3 class="anchored" data-anchor-id="alternative-joint-3-parameter-estimation-for-reference">Alternative: Joint 3-Parameter Estimation (For Reference)</h3>
+<p>The following pseudocode shows joint estimation of all three parameters, which suffers from identification issues as demonstrated above.</p>
+<section id="pseudocode-joint-estimation-not-recommended" class="level4">
+<h4 class="anchored" data-anchor-id="pseudocode-joint-estimation-not-recommended">Pseudocode: Joint Estimation (Not Recommended)</h4>
 <pre><code>FUNCTION ESTIMATE_MLE(data, theta_init, solver_params, bounds):
     """
     Estimate structural parameters via Maximum Likelihood.
@@ -617,238 +764,238 @@ test/mdp_estimator/
 <section id="step-1-create-estimator-module" class="level3">
 <h3 class="anchored" data-anchor-id="step-1-create-estimator-module">Step 1: Create Estimator Module</h3>
 <p>File: <code>src/mdp_estimator/mdp_estimator.py</code></p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co">"""MDP Structural Parameter Estimator using NFXP."""</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scipy <span class="im">import</span> optimize</span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> dataclasses <span class="im">import</span> dataclass</span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> typing <span class="im">import</span> Tuple, Dict, Any, Optional</span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> mdp_solver <span class="im">import</span> solve_value_function, compute_choice_probability</span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> mdp_simulator <span class="im">import</span> PanelData</span>
-<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a><span class="at">@dataclass</span></span>
-<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> EstimationResult:</span>
-<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Container for estimation results."""</span></span>
-<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>    theta_hat: np.ndarray          <span class="co"># (beta, gamma, delta)</span></span>
-<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    std_errors: np.ndarray         <span class="co"># Standard errors</span></span>
-<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>    cov_matrix: np.ndarray         <span class="co"># Covariance matrix</span></span>
-<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>    log_likelihood: <span class="bu">float</span>          <span class="co"># Log-likelihood at optimum</span></span>
-<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>    n_iterations: <span class="bu">int</span>              <span class="co"># Outer loop iterations</span></span>
-<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>    converged: <span class="bu">bool</span>                <span class="co"># Whether optimizer converged</span></span>
-<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>    optimization_result: Any       <span class="co"># Full scipy result object</span></span>
-<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> compute_log_likelihood(</span>
-<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>    theta: np.ndarray,</span>
-<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>    data: PanelData,</span>
-<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>    solver_params: Dict[<span class="bu">str</span>, Any],</span>
-<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
-<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
-<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a><span class="co">    Compute log-likelihood for candidate parameters.</span></span>
-<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a><span class="co">    </span></span>
-<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a><span class="co">    Parameters</span></span>
-<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a><span class="co">    ----------</span></span>
-<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a><span class="co">    theta : np.ndarray</span></span>
-<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a><span class="co">        Parameters (beta, gamma, delta)</span></span>
-<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a><span class="co">    data : PanelData</span></span>
-<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a><span class="co">        Panel data with states and actions</span></span>
-<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a><span class="co">    solver_params : dict</span></span>
-<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a><span class="co">        Solver hyperparameters (s_min, s_max, hidden_sizes, etc.)</span></span>
-<span id="cb5-41"><a href="#cb5-41" aria-hidden="true" tabindex="-1"></a><span class="co">    </span></span>
-<span id="cb5-42"><a href="#cb5-42" aria-hidden="true" tabindex="-1"></a><span class="co">    Returns</span></span>
-<span id="cb5-43"><a href="#cb5-43" aria-hidden="true" tabindex="-1"></a><span class="co">    -------</span></span>
-<span id="cb5-44"><a href="#cb5-44" aria-hidden="true" tabindex="-1"></a><span class="co">    float</span></span>
-<span id="cb5-45"><a href="#cb5-45" aria-hidden="true" tabindex="-1"></a><span class="co">        Log-likelihood value</span></span>
-<span id="cb5-46"><a href="#cb5-46" aria-hidden="true" tabindex="-1"></a><span class="co">    """</span></span>
-<span id="cb5-47"><a href="#cb5-47" aria-hidden="true" tabindex="-1"></a>    beta, gamma, delta <span class="op">=</span> theta</span>
-<span id="cb5-48"><a href="#cb5-48" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb5-49"><a href="#cb5-49" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Validate bounds</span></span>
-<span id="cb5-50"><a href="#cb5-50" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> beta <span class="op">&lt;=</span> <span class="dv">0</span> <span class="kw">or</span> gamma <span class="op">&lt;=</span> <span class="dv">0</span> <span class="kw">or</span> gamma <span class="op">&gt;=</span> <span class="dv">1</span> <span class="kw">or</span> delta <span class="op">&lt;=</span> <span class="dv">0</span> <span class="kw">or</span> delta <span class="op">&gt;=</span> <span class="dv">1</span>:</span>
-<span id="cb5-51"><a href="#cb5-51" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="op">-</span>np.inf</span>
-<span id="cb5-52"><a href="#cb5-52" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb5-53"><a href="#cb5-53" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Inner loop: solve for value functions</span></span>
-<span id="cb5-54"><a href="#cb5-54" aria-hidden="true" tabindex="-1"></a>    v0_net, v1_net, losses, n_iter <span class="op">=</span> solve_value_function(</span>
-<span id="cb5-55"><a href="#cb5-55" aria-hidden="true" tabindex="-1"></a>        beta<span class="op">=</span>beta,</span>
-<span id="cb5-56"><a href="#cb5-56" aria-hidden="true" tabindex="-1"></a>        gamma<span class="op">=</span>gamma,</span>
-<span id="cb5-57"><a href="#cb5-57" aria-hidden="true" tabindex="-1"></a>        delta<span class="op">=</span>delta,</span>
-<span id="cb5-58"><a href="#cb5-58" aria-hidden="true" tabindex="-1"></a>        s_min<span class="op">=</span>solver_params[<span class="st">'s_min'</span>],</span>
-<span id="cb5-59"><a href="#cb5-59" aria-hidden="true" tabindex="-1"></a>        s_max<span class="op">=</span>solver_params[<span class="st">'s_max'</span>],</span>
-<span id="cb5-60"><a href="#cb5-60" aria-hidden="true" tabindex="-1"></a>        hidden_sizes<span class="op">=</span>solver_params[<span class="st">'hidden_sizes'</span>],</span>
-<span id="cb5-61"><a href="#cb5-61" aria-hidden="true" tabindex="-1"></a>        learning_rate<span class="op">=</span>solver_params[<span class="st">'learning_rate'</span>],</span>
-<span id="cb5-62"><a href="#cb5-62" aria-hidden="true" tabindex="-1"></a>        batch_size<span class="op">=</span>solver_params[<span class="st">'batch_size'</span>],</span>
-<span id="cb5-63"><a href="#cb5-63" aria-hidden="true" tabindex="-1"></a>        tolerance<span class="op">=</span>solver_params[<span class="st">'tolerance'</span>],</span>
-<span id="cb5-64"><a href="#cb5-64" aria-hidden="true" tabindex="-1"></a>        max_iterations<span class="op">=</span>solver_params[<span class="st">'max_iterations'</span>],</span>
-<span id="cb5-65"><a href="#cb5-65" aria-hidden="true" tabindex="-1"></a>        target_update_freq<span class="op">=</span>solver_params.get(<span class="st">'target_update_freq'</span>, <span class="dv">100</span>),</span>
-<span id="cb5-66"><a href="#cb5-66" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb5-67"><a href="#cb5-67" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb5-68"><a href="#cb5-68" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Compute choice probabilities</span></span>
-<span id="cb5-69"><a href="#cb5-69" aria-hidden="true" tabindex="-1"></a>    states_flat <span class="op">=</span> data.states.flatten()</span>
-<span id="cb5-70"><a href="#cb5-70" aria-hidden="true" tabindex="-1"></a>    actions_flat <span class="op">=</span> data.actions.flatten()</span>
-<span id="cb5-71"><a href="#cb5-71" aria-hidden="true" tabindex="-1"></a>    s_tensor <span class="op">=</span> torch.tensor(states_flat, dtype<span class="op">=</span>torch.float32)</span>
-<span id="cb5-72"><a href="#cb5-72" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb5-73"><a href="#cb5-73" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> torch.no_grad():</span>
-<span id="cb5-74"><a href="#cb5-74" aria-hidden="true" tabindex="-1"></a>        p1 <span class="op">=</span> compute_choice_probability(v0_net, v1_net, s_tensor).numpy()</span>
-<span id="cb5-75"><a href="#cb5-75" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb5-76"><a href="#cb5-76" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Clip for numerical stability</span></span>
-<span id="cb5-77"><a href="#cb5-77" aria-hidden="true" tabindex="-1"></a>    eps <span class="op">=</span> <span class="fl">1e-10</span></span>
-<span id="cb5-78"><a href="#cb5-78" aria-hidden="true" tabindex="-1"></a>    p1 <span class="op">=</span> np.clip(p1, eps, <span class="dv">1</span> <span class="op">-</span> eps)</span>
-<span id="cb5-79"><a href="#cb5-79" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb5-80"><a href="#cb5-80" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Log-likelihood</span></span>
-<span id="cb5-81"><a href="#cb5-81" aria-hidden="true" tabindex="-1"></a>    log_lik <span class="op">=</span> np.<span class="bu">sum</span>(</span>
-<span id="cb5-82"><a href="#cb5-82" aria-hidden="true" tabindex="-1"></a>        actions_flat <span class="op">*</span> np.log(p1) <span class="op">+</span> </span>
-<span id="cb5-83"><a href="#cb5-83" aria-hidden="true" tabindex="-1"></a>        (<span class="dv">1</span> <span class="op">-</span> actions_flat) <span class="op">*</span> np.log(<span class="dv">1</span> <span class="op">-</span> p1)</span>
-<span id="cb5-84"><a href="#cb5-84" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb5-85"><a href="#cb5-85" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb5-86"><a href="#cb5-86" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> log_lik</span>
-<span id="cb5-87"><a href="#cb5-87" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-88"><a href="#cb5-88" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-89"><a href="#cb5-89" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> estimate_mle(</span>
-<span id="cb5-90"><a href="#cb5-90" aria-hidden="true" tabindex="-1"></a>    data: PanelData,</span>
-<span id="cb5-91"><a href="#cb5-91" aria-hidden="true" tabindex="-1"></a>    theta_init: Tuple[<span class="bu">float</span>, <span class="bu">float</span>, <span class="bu">float</span>],</span>
-<span id="cb5-92"><a href="#cb5-92" aria-hidden="true" tabindex="-1"></a>    solver_params: Dict[<span class="bu">str</span>, Any],</span>
-<span id="cb5-93"><a href="#cb5-93" aria-hidden="true" tabindex="-1"></a>    maxiter: <span class="bu">int</span> <span class="op">=</span> <span class="dv">200</span>,</span>
-<span id="cb5-94"><a href="#cb5-94" aria-hidden="true" tabindex="-1"></a>    verbose: <span class="bu">bool</span> <span class="op">=</span> <span class="va">True</span>,</span>
-<span id="cb5-95"><a href="#cb5-95" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> EstimationResult:</span>
-<span id="cb5-96"><a href="#cb5-96" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
-<span id="cb5-97"><a href="#cb5-97" aria-hidden="true" tabindex="-1"></a><span class="co">    Estimate structural parameters via MLE using NFXP.</span></span>
-<span id="cb5-98"><a href="#cb5-98" aria-hidden="true" tabindex="-1"></a><span class="co">    </span></span>
-<span id="cb5-99"><a href="#cb5-99" aria-hidden="true" tabindex="-1"></a><span class="co">    Parameters</span></span>
-<span id="cb5-100"><a href="#cb5-100" aria-hidden="true" tabindex="-1"></a><span class="co">    ----------</span></span>
-<span id="cb5-101"><a href="#cb5-101" aria-hidden="true" tabindex="-1"></a><span class="co">    data : PanelData</span></span>
-<span id="cb5-102"><a href="#cb5-102" aria-hidden="true" tabindex="-1"></a><span class="co">        Panel data with states and actions</span></span>
-<span id="cb5-103"><a href="#cb5-103" aria-hidden="true" tabindex="-1"></a><span class="co">    theta_init : tuple</span></span>
-<span id="cb5-104"><a href="#cb5-104" aria-hidden="true" tabindex="-1"></a><span class="co">        Initial guess (beta, gamma, delta)</span></span>
-<span id="cb5-105"><a href="#cb5-105" aria-hidden="true" tabindex="-1"></a><span class="co">    solver_params : dict</span></span>
-<span id="cb5-106"><a href="#cb5-106" aria-hidden="true" tabindex="-1"></a><span class="co">        Solver hyperparameters</span></span>
-<span id="cb5-107"><a href="#cb5-107" aria-hidden="true" tabindex="-1"></a><span class="co">    maxiter : int</span></span>
-<span id="cb5-108"><a href="#cb5-108" aria-hidden="true" tabindex="-1"></a><span class="co">        Maximum outer loop iterations</span></span>
-<span id="cb5-109"><a href="#cb5-109" aria-hidden="true" tabindex="-1"></a><span class="co">    verbose : bool</span></span>
-<span id="cb5-110"><a href="#cb5-110" aria-hidden="true" tabindex="-1"></a><span class="co">        Print progress</span></span>
-<span id="cb5-111"><a href="#cb5-111" aria-hidden="true" tabindex="-1"></a><span class="co">    </span></span>
-<span id="cb5-112"><a href="#cb5-112" aria-hidden="true" tabindex="-1"></a><span class="co">    Returns</span></span>
-<span id="cb5-113"><a href="#cb5-113" aria-hidden="true" tabindex="-1"></a><span class="co">    -------</span></span>
-<span id="cb5-114"><a href="#cb5-114" aria-hidden="true" tabindex="-1"></a><span class="co">    EstimationResult</span></span>
-<span id="cb5-115"><a href="#cb5-115" aria-hidden="true" tabindex="-1"></a><span class="co">        Estimation results including estimates and standard errors</span></span>
-<span id="cb5-116"><a href="#cb5-116" aria-hidden="true" tabindex="-1"></a><span class="co">    """</span></span>
-<span id="cb5-117"><a href="#cb5-117" aria-hidden="true" tabindex="-1"></a>    theta_init <span class="op">=</span> np.array(theta_init)</span>
-<span id="cb5-118"><a href="#cb5-118" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb5-119"><a href="#cb5-119" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Track evaluations</span></span>
-<span id="cb5-120"><a href="#cb5-120" aria-hidden="true" tabindex="-1"></a>    eval_count <span class="op">=</span> [<span class="dv">0</span>]</span>
-<span id="cb5-121"><a href="#cb5-121" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb5-122"><a href="#cb5-122" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> neg_log_lik(theta):</span>
-<span id="cb5-123"><a href="#cb5-123" aria-hidden="true" tabindex="-1"></a>        eval_count[<span class="dv">0</span>] <span class="op">+=</span> <span class="dv">1</span></span>
-<span id="cb5-124"><a href="#cb5-124" aria-hidden="true" tabindex="-1"></a>        ll <span class="op">=</span> compute_log_likelihood(theta, data, solver_params)</span>
-<span id="cb5-125"><a href="#cb5-125" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> verbose <span class="kw">and</span> eval_count[<span class="dv">0</span>] <span class="op">%</span> <span class="dv">10</span> <span class="op">==</span> <span class="dv">0</span>:</span>
-<span id="cb5-126"><a href="#cb5-126" aria-hidden="true" tabindex="-1"></a>            <span class="bu">print</span>(<span class="ss">f"Eval </span><span class="sc">{</span>eval_count[<span class="dv">0</span>]<span class="sc">}</span><span class="ss">: theta=</span><span class="sc">{</span>theta<span class="sc">}</span><span class="ss">, LL=</span><span class="sc">{</span>ll<span class="sc">:.2f}</span><span class="ss">"</span>)</span>
-<span id="cb5-127"><a href="#cb5-127" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="op">-</span>ll</span>
-<span id="cb5-128"><a href="#cb5-128" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb5-129"><a href="#cb5-129" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Run optimization</span></span>
-<span id="cb5-130"><a href="#cb5-130" aria-hidden="true" tabindex="-1"></a>    result <span class="op">=</span> optimize.minimize(</span>
-<span id="cb5-131"><a href="#cb5-131" aria-hidden="true" tabindex="-1"></a>        neg_log_lik,</span>
-<span id="cb5-132"><a href="#cb5-132" aria-hidden="true" tabindex="-1"></a>        theta_init,</span>
-<span id="cb5-133"><a href="#cb5-133" aria-hidden="true" tabindex="-1"></a>        method<span class="op">=</span><span class="st">'Nelder-Mead'</span>,</span>
-<span id="cb5-134"><a href="#cb5-134" aria-hidden="true" tabindex="-1"></a>        options<span class="op">=</span>{</span>
-<span id="cb5-135"><a href="#cb5-135" aria-hidden="true" tabindex="-1"></a>            <span class="st">'maxiter'</span>: maxiter,</span>
-<span id="cb5-136"><a href="#cb5-136" aria-hidden="true" tabindex="-1"></a>            <span class="st">'xatol'</span>: <span class="fl">1e-4</span>,</span>
-<span id="cb5-137"><a href="#cb5-137" aria-hidden="true" tabindex="-1"></a>            <span class="st">'fatol'</span>: <span class="fl">1e-4</span>,</span>
-<span id="cb5-138"><a href="#cb5-138" aria-hidden="true" tabindex="-1"></a>            <span class="st">'disp'</span>: verbose,</span>
-<span id="cb5-139"><a href="#cb5-139" aria-hidden="true" tabindex="-1"></a>            <span class="st">'adaptive'</span>: <span class="va">True</span>,</span>
-<span id="cb5-140"><a href="#cb5-140" aria-hidden="true" tabindex="-1"></a>        }</span>
-<span id="cb5-141"><a href="#cb5-141" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb5-142"><a href="#cb5-142" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb5-143"><a href="#cb5-143" aria-hidden="true" tabindex="-1"></a>    theta_hat <span class="op">=</span> result.x</span>
-<span id="cb5-144"><a href="#cb5-144" aria-hidden="true" tabindex="-1"></a>    log_lik_hat <span class="op">=</span> <span class="op">-</span>result.fun</span>
-<span id="cb5-145"><a href="#cb5-145" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb5-146"><a href="#cb5-146" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Compute standard errors</span></span>
-<span id="cb5-147"><a href="#cb5-147" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> verbose:</span>
-<span id="cb5-148"><a href="#cb5-148" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="st">"Computing standard errors..."</span>)</span>
-<span id="cb5-149"><a href="#cb5-149" aria-hidden="true" tabindex="-1"></a>    std_errors, cov_matrix <span class="op">=</span> compute_standard_errors(</span>
-<span id="cb5-150"><a href="#cb5-150" aria-hidden="true" tabindex="-1"></a>        theta_hat, data, solver_params</span>
-<span id="cb5-151"><a href="#cb5-151" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb5-152"><a href="#cb5-152" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb5-153"><a href="#cb5-153" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> EstimationResult(</span>
-<span id="cb5-154"><a href="#cb5-154" aria-hidden="true" tabindex="-1"></a>        theta_hat<span class="op">=</span>theta_hat,</span>
-<span id="cb5-155"><a href="#cb5-155" aria-hidden="true" tabindex="-1"></a>        std_errors<span class="op">=</span>std_errors,</span>
-<span id="cb5-156"><a href="#cb5-156" aria-hidden="true" tabindex="-1"></a>        cov_matrix<span class="op">=</span>cov_matrix,</span>
-<span id="cb5-157"><a href="#cb5-157" aria-hidden="true" tabindex="-1"></a>        log_likelihood<span class="op">=</span>log_lik_hat,</span>
-<span id="cb5-158"><a href="#cb5-158" aria-hidden="true" tabindex="-1"></a>        n_iterations<span class="op">=</span>result.nit,</span>
-<span id="cb5-159"><a href="#cb5-159" aria-hidden="true" tabindex="-1"></a>        converged<span class="op">=</span>result.success,</span>
-<span id="cb5-160"><a href="#cb5-160" aria-hidden="true" tabindex="-1"></a>        optimization_result<span class="op">=</span>result,</span>
-<span id="cb5-161"><a href="#cb5-161" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb5-162"><a href="#cb5-162" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-163"><a href="#cb5-163" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-164"><a href="#cb5-164" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> compute_standard_errors(</span>
-<span id="cb5-165"><a href="#cb5-165" aria-hidden="true" tabindex="-1"></a>    theta_hat: np.ndarray,</span>
-<span id="cb5-166"><a href="#cb5-166" aria-hidden="true" tabindex="-1"></a>    data: PanelData,</span>
-<span id="cb5-167"><a href="#cb5-167" aria-hidden="true" tabindex="-1"></a>    solver_params: Dict[<span class="bu">str</span>, Any],</span>
-<span id="cb5-168"><a href="#cb5-168" aria-hidden="true" tabindex="-1"></a>    eps: <span class="bu">float</span> <span class="op">=</span> <span class="fl">1e-4</span>,</span>
-<span id="cb5-169"><a href="#cb5-169" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> Tuple[np.ndarray, np.ndarray]:</span>
-<span id="cb5-170"><a href="#cb5-170" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
-<span id="cb5-171"><a href="#cb5-171" aria-hidden="true" tabindex="-1"></a><span class="co">    Compute standard errors via numerical Hessian.</span></span>
-<span id="cb5-172"><a href="#cb5-172" aria-hidden="true" tabindex="-1"></a><span class="co">    </span></span>
-<span id="cb5-173"><a href="#cb5-173" aria-hidden="true" tabindex="-1"></a><span class="co">    Parameters</span></span>
-<span id="cb5-174"><a href="#cb5-174" aria-hidden="true" tabindex="-1"></a><span class="co">    ----------</span></span>
-<span id="cb5-175"><a href="#cb5-175" aria-hidden="true" tabindex="-1"></a><span class="co">    theta_hat : np.ndarray</span></span>
-<span id="cb5-176"><a href="#cb5-176" aria-hidden="true" tabindex="-1"></a><span class="co">        MLE estimates</span></span>
-<span id="cb5-177"><a href="#cb5-177" aria-hidden="true" tabindex="-1"></a><span class="co">    data : PanelData</span></span>
-<span id="cb5-178"><a href="#cb5-178" aria-hidden="true" tabindex="-1"></a><span class="co">        Panel data</span></span>
-<span id="cb5-179"><a href="#cb5-179" aria-hidden="true" tabindex="-1"></a><span class="co">    solver_params : dict</span></span>
-<span id="cb5-180"><a href="#cb5-180" aria-hidden="true" tabindex="-1"></a><span class="co">        Solver hyperparameters</span></span>
-<span id="cb5-181"><a href="#cb5-181" aria-hidden="true" tabindex="-1"></a><span class="co">    eps : float</span></span>
-<span id="cb5-182"><a href="#cb5-182" aria-hidden="true" tabindex="-1"></a><span class="co">        Step size for finite differences</span></span>
-<span id="cb5-183"><a href="#cb5-183" aria-hidden="true" tabindex="-1"></a><span class="co">    </span></span>
-<span id="cb5-184"><a href="#cb5-184" aria-hidden="true" tabindex="-1"></a><span class="co">    Returns</span></span>
-<span id="cb5-185"><a href="#cb5-185" aria-hidden="true" tabindex="-1"></a><span class="co">    -------</span></span>
-<span id="cb5-186"><a href="#cb5-186" aria-hidden="true" tabindex="-1"></a><span class="co">    std_errors : np.ndarray</span></span>
-<span id="cb5-187"><a href="#cb5-187" aria-hidden="true" tabindex="-1"></a><span class="co">        Standard errors for each parameter</span></span>
-<span id="cb5-188"><a href="#cb5-188" aria-hidden="true" tabindex="-1"></a><span class="co">    cov_matrix : np.ndarray</span></span>
-<span id="cb5-189"><a href="#cb5-189" aria-hidden="true" tabindex="-1"></a><span class="co">        Variance-covariance matrix</span></span>
-<span id="cb5-190"><a href="#cb5-190" aria-hidden="true" tabindex="-1"></a><span class="co">    """</span></span>
-<span id="cb5-191"><a href="#cb5-191" aria-hidden="true" tabindex="-1"></a>    n_params <span class="op">=</span> <span class="bu">len</span>(theta_hat)</span>
-<span id="cb5-192"><a href="#cb5-192" aria-hidden="true" tabindex="-1"></a>    hessian <span class="op">=</span> np.zeros((n_params, n_params))</span>
-<span id="cb5-193"><a href="#cb5-193" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb5-194"><a href="#cb5-194" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(n_params):</span>
-<span id="cb5-195"><a href="#cb5-195" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> j <span class="kw">in</span> <span class="bu">range</span>(i, n_params):  <span class="co"># Exploit symmetry</span></span>
-<span id="cb5-196"><a href="#cb5-196" aria-hidden="true" tabindex="-1"></a>            theta_pp <span class="op">=</span> theta_hat.copy()</span>
-<span id="cb5-197"><a href="#cb5-197" aria-hidden="true" tabindex="-1"></a>            theta_pp[i] <span class="op">+=</span> eps</span>
-<span id="cb5-198"><a href="#cb5-198" aria-hidden="true" tabindex="-1"></a>            theta_pp[j] <span class="op">+=</span> eps</span>
-<span id="cb5-199"><a href="#cb5-199" aria-hidden="true" tabindex="-1"></a>            </span>
-<span id="cb5-200"><a href="#cb5-200" aria-hidden="true" tabindex="-1"></a>            theta_pm <span class="op">=</span> theta_hat.copy()</span>
-<span id="cb5-201"><a href="#cb5-201" aria-hidden="true" tabindex="-1"></a>            theta_pm[i] <span class="op">+=</span> eps</span>
-<span id="cb5-202"><a href="#cb5-202" aria-hidden="true" tabindex="-1"></a>            theta_pm[j] <span class="op">-=</span> eps</span>
-<span id="cb5-203"><a href="#cb5-203" aria-hidden="true" tabindex="-1"></a>            </span>
-<span id="cb5-204"><a href="#cb5-204" aria-hidden="true" tabindex="-1"></a>            theta_mp <span class="op">=</span> theta_hat.copy()</span>
-<span id="cb5-205"><a href="#cb5-205" aria-hidden="true" tabindex="-1"></a>            theta_mp[i] <span class="op">-=</span> eps</span>
-<span id="cb5-206"><a href="#cb5-206" aria-hidden="true" tabindex="-1"></a>            theta_mp[j] <span class="op">+=</span> eps</span>
-<span id="cb5-207"><a href="#cb5-207" aria-hidden="true" tabindex="-1"></a>            </span>
-<span id="cb5-208"><a href="#cb5-208" aria-hidden="true" tabindex="-1"></a>            theta_mm <span class="op">=</span> theta_hat.copy()</span>
-<span id="cb5-209"><a href="#cb5-209" aria-hidden="true" tabindex="-1"></a>            theta_mm[i] <span class="op">-=</span> eps</span>
-<span id="cb5-210"><a href="#cb5-210" aria-hidden="true" tabindex="-1"></a>            theta_mm[j] <span class="op">-=</span> eps</span>
-<span id="cb5-211"><a href="#cb5-211" aria-hidden="true" tabindex="-1"></a>            </span>
-<span id="cb5-212"><a href="#cb5-212" aria-hidden="true" tabindex="-1"></a>            f_pp <span class="op">=</span> compute_log_likelihood(theta_pp, data, solver_params)</span>
-<span id="cb5-213"><a href="#cb5-213" aria-hidden="true" tabindex="-1"></a>            f_pm <span class="op">=</span> compute_log_likelihood(theta_pm, data, solver_params)</span>
-<span id="cb5-214"><a href="#cb5-214" aria-hidden="true" tabindex="-1"></a>            f_mp <span class="op">=</span> compute_log_likelihood(theta_mp, data, solver_params)</span>
-<span id="cb5-215"><a href="#cb5-215" aria-hidden="true" tabindex="-1"></a>            f_mm <span class="op">=</span> compute_log_likelihood(theta_mm, data, solver_params)</span>
-<span id="cb5-216"><a href="#cb5-216" aria-hidden="true" tabindex="-1"></a>            </span>
-<span id="cb5-217"><a href="#cb5-217" aria-hidden="true" tabindex="-1"></a>            hessian[i, j] <span class="op">=</span> (f_pp <span class="op">-</span> f_pm <span class="op">-</span> f_mp <span class="op">+</span> f_mm) <span class="op">/</span> (<span class="dv">4</span> <span class="op">*</span> eps <span class="op">*</span> eps)</span>
-<span id="cb5-218"><a href="#cb5-218" aria-hidden="true" tabindex="-1"></a>            hessian[j, i] <span class="op">=</span> hessian[i, j]  <span class="co"># Symmetric</span></span>
-<span id="cb5-219"><a href="#cb5-219" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb5-220"><a href="#cb5-220" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Information matrix = -Hessian</span></span>
-<span id="cb5-221"><a href="#cb5-221" aria-hidden="true" tabindex="-1"></a>    info_matrix <span class="op">=</span> <span class="op">-</span>hessian</span>
-<span id="cb5-222"><a href="#cb5-222" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb5-223"><a href="#cb5-223" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Covariance = inverse of information matrix</span></span>
-<span id="cb5-224"><a href="#cb5-224" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span>:</span>
-<span id="cb5-225"><a href="#cb5-225" aria-hidden="true" tabindex="-1"></a>        cov_matrix <span class="op">=</span> np.linalg.inv(info_matrix)</span>
-<span id="cb5-226"><a href="#cb5-226" aria-hidden="true" tabindex="-1"></a>        std_errors <span class="op">=</span> np.sqrt(np.diag(cov_matrix))</span>
-<span id="cb5-227"><a href="#cb5-227" aria-hidden="true" tabindex="-1"></a>    <span class="cf">except</span> np.linalg.LinAlgError:</span>
-<span id="cb5-228"><a href="#cb5-228" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Singular matrix - return NaN</span></span>
-<span id="cb5-229"><a href="#cb5-229" aria-hidden="true" tabindex="-1"></a>        cov_matrix <span class="op">=</span> np.full((n_params, n_params), np.nan)</span>
-<span id="cb5-230"><a href="#cb5-230" aria-hidden="true" tabindex="-1"></a>        std_errors <span class="op">=</span> np.full(n_params, np.nan)</span>
-<span id="cb5-231"><a href="#cb5-231" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb5-232"><a href="#cb5-232" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> std_errors, cov_matrix</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co">"""MDP Structural Parameter Estimator using NFXP."""</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scipy <span class="im">import</span> optimize</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> dataclasses <span class="im">import</span> dataclass</span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> typing <span class="im">import</span> Tuple, Dict, Any, Optional</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> mdp_solver <span class="im">import</span> solve_value_function, compute_choice_probability</span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> mdp_simulator <span class="im">import</span> PanelData</span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a><span class="at">@dataclass</span></span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> EstimationResult:</span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Container for estimation results."""</span></span>
+<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>    theta_hat: np.ndarray          <span class="co"># (beta, gamma, delta)</span></span>
+<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a>    std_errors: np.ndarray         <span class="co"># Standard errors</span></span>
+<span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a>    cov_matrix: np.ndarray         <span class="co"># Covariance matrix</span></span>
+<span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a>    log_likelihood: <span class="bu">float</span>          <span class="co"># Log-likelihood at optimum</span></span>
+<span id="cb8-20"><a href="#cb8-20" aria-hidden="true" tabindex="-1"></a>    n_iterations: <span class="bu">int</span>              <span class="co"># Outer loop iterations</span></span>
+<span id="cb8-21"><a href="#cb8-21" aria-hidden="true" tabindex="-1"></a>    converged: <span class="bu">bool</span>                <span class="co"># Whether optimizer converged</span></span>
+<span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a>    optimization_result: Any       <span class="co"># Full scipy result object</span></span>
+<span id="cb8-23"><a href="#cb8-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-24"><a href="#cb8-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-25"><a href="#cb8-25" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> compute_log_likelihood(</span>
+<span id="cb8-26"><a href="#cb8-26" aria-hidden="true" tabindex="-1"></a>    theta: np.ndarray,</span>
+<span id="cb8-27"><a href="#cb8-27" aria-hidden="true" tabindex="-1"></a>    data: PanelData,</span>
+<span id="cb8-28"><a href="#cb8-28" aria-hidden="true" tabindex="-1"></a>    solver_params: Dict[<span class="bu">str</span>, Any],</span>
+<span id="cb8-29"><a href="#cb8-29" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
+<span id="cb8-30"><a href="#cb8-30" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
+<span id="cb8-31"><a href="#cb8-31" aria-hidden="true" tabindex="-1"></a><span class="co">    Compute log-likelihood for candidate parameters.</span></span>
+<span id="cb8-32"><a href="#cb8-32" aria-hidden="true" tabindex="-1"></a><span class="co">    </span></span>
+<span id="cb8-33"><a href="#cb8-33" aria-hidden="true" tabindex="-1"></a><span class="co">    Parameters</span></span>
+<span id="cb8-34"><a href="#cb8-34" aria-hidden="true" tabindex="-1"></a><span class="co">    ----------</span></span>
+<span id="cb8-35"><a href="#cb8-35" aria-hidden="true" tabindex="-1"></a><span class="co">    theta : np.ndarray</span></span>
+<span id="cb8-36"><a href="#cb8-36" aria-hidden="true" tabindex="-1"></a><span class="co">        Parameters (beta, gamma, delta)</span></span>
+<span id="cb8-37"><a href="#cb8-37" aria-hidden="true" tabindex="-1"></a><span class="co">    data : PanelData</span></span>
+<span id="cb8-38"><a href="#cb8-38" aria-hidden="true" tabindex="-1"></a><span class="co">        Panel data with states and actions</span></span>
+<span id="cb8-39"><a href="#cb8-39" aria-hidden="true" tabindex="-1"></a><span class="co">    solver_params : dict</span></span>
+<span id="cb8-40"><a href="#cb8-40" aria-hidden="true" tabindex="-1"></a><span class="co">        Solver hyperparameters (s_min, s_max, hidden_sizes, etc.)</span></span>
+<span id="cb8-41"><a href="#cb8-41" aria-hidden="true" tabindex="-1"></a><span class="co">    </span></span>
+<span id="cb8-42"><a href="#cb8-42" aria-hidden="true" tabindex="-1"></a><span class="co">    Returns</span></span>
+<span id="cb8-43"><a href="#cb8-43" aria-hidden="true" tabindex="-1"></a><span class="co">    -------</span></span>
+<span id="cb8-44"><a href="#cb8-44" aria-hidden="true" tabindex="-1"></a><span class="co">    float</span></span>
+<span id="cb8-45"><a href="#cb8-45" aria-hidden="true" tabindex="-1"></a><span class="co">        Log-likelihood value</span></span>
+<span id="cb8-46"><a href="#cb8-46" aria-hidden="true" tabindex="-1"></a><span class="co">    """</span></span>
+<span id="cb8-47"><a href="#cb8-47" aria-hidden="true" tabindex="-1"></a>    beta, gamma, delta <span class="op">=</span> theta</span>
+<span id="cb8-48"><a href="#cb8-48" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb8-49"><a href="#cb8-49" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Validate bounds</span></span>
+<span id="cb8-50"><a href="#cb8-50" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> beta <span class="op">&lt;=</span> <span class="dv">0</span> <span class="kw">or</span> gamma <span class="op">&lt;=</span> <span class="dv">0</span> <span class="kw">or</span> gamma <span class="op">&gt;=</span> <span class="dv">1</span> <span class="kw">or</span> delta <span class="op">&lt;=</span> <span class="dv">0</span> <span class="kw">or</span> delta <span class="op">&gt;=</span> <span class="dv">1</span>:</span>
+<span id="cb8-51"><a href="#cb8-51" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="op">-</span>np.inf</span>
+<span id="cb8-52"><a href="#cb8-52" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb8-53"><a href="#cb8-53" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Inner loop: solve for value functions</span></span>
+<span id="cb8-54"><a href="#cb8-54" aria-hidden="true" tabindex="-1"></a>    v0_net, v1_net, losses, n_iter <span class="op">=</span> solve_value_function(</span>
+<span id="cb8-55"><a href="#cb8-55" aria-hidden="true" tabindex="-1"></a>        beta<span class="op">=</span>beta,</span>
+<span id="cb8-56"><a href="#cb8-56" aria-hidden="true" tabindex="-1"></a>        gamma<span class="op">=</span>gamma,</span>
+<span id="cb8-57"><a href="#cb8-57" aria-hidden="true" tabindex="-1"></a>        delta<span class="op">=</span>delta,</span>
+<span id="cb8-58"><a href="#cb8-58" aria-hidden="true" tabindex="-1"></a>        s_min<span class="op">=</span>solver_params[<span class="st">'s_min'</span>],</span>
+<span id="cb8-59"><a href="#cb8-59" aria-hidden="true" tabindex="-1"></a>        s_max<span class="op">=</span>solver_params[<span class="st">'s_max'</span>],</span>
+<span id="cb8-60"><a href="#cb8-60" aria-hidden="true" tabindex="-1"></a>        hidden_sizes<span class="op">=</span>solver_params[<span class="st">'hidden_sizes'</span>],</span>
+<span id="cb8-61"><a href="#cb8-61" aria-hidden="true" tabindex="-1"></a>        learning_rate<span class="op">=</span>solver_params[<span class="st">'learning_rate'</span>],</span>
+<span id="cb8-62"><a href="#cb8-62" aria-hidden="true" tabindex="-1"></a>        batch_size<span class="op">=</span>solver_params[<span class="st">'batch_size'</span>],</span>
+<span id="cb8-63"><a href="#cb8-63" aria-hidden="true" tabindex="-1"></a>        tolerance<span class="op">=</span>solver_params[<span class="st">'tolerance'</span>],</span>
+<span id="cb8-64"><a href="#cb8-64" aria-hidden="true" tabindex="-1"></a>        max_iterations<span class="op">=</span>solver_params[<span class="st">'max_iterations'</span>],</span>
+<span id="cb8-65"><a href="#cb8-65" aria-hidden="true" tabindex="-1"></a>        target_update_freq<span class="op">=</span>solver_params.get(<span class="st">'target_update_freq'</span>, <span class="dv">100</span>),</span>
+<span id="cb8-66"><a href="#cb8-66" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb8-67"><a href="#cb8-67" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb8-68"><a href="#cb8-68" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Compute choice probabilities</span></span>
+<span id="cb8-69"><a href="#cb8-69" aria-hidden="true" tabindex="-1"></a>    states_flat <span class="op">=</span> data.states.flatten()</span>
+<span id="cb8-70"><a href="#cb8-70" aria-hidden="true" tabindex="-1"></a>    actions_flat <span class="op">=</span> data.actions.flatten()</span>
+<span id="cb8-71"><a href="#cb8-71" aria-hidden="true" tabindex="-1"></a>    s_tensor <span class="op">=</span> torch.tensor(states_flat, dtype<span class="op">=</span>torch.float32)</span>
+<span id="cb8-72"><a href="#cb8-72" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb8-73"><a href="#cb8-73" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> torch.no_grad():</span>
+<span id="cb8-74"><a href="#cb8-74" aria-hidden="true" tabindex="-1"></a>        p1 <span class="op">=</span> compute_choice_probability(v0_net, v1_net, s_tensor).numpy()</span>
+<span id="cb8-75"><a href="#cb8-75" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb8-76"><a href="#cb8-76" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Clip for numerical stability</span></span>
+<span id="cb8-77"><a href="#cb8-77" aria-hidden="true" tabindex="-1"></a>    eps <span class="op">=</span> <span class="fl">1e-10</span></span>
+<span id="cb8-78"><a href="#cb8-78" aria-hidden="true" tabindex="-1"></a>    p1 <span class="op">=</span> np.clip(p1, eps, <span class="dv">1</span> <span class="op">-</span> eps)</span>
+<span id="cb8-79"><a href="#cb8-79" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb8-80"><a href="#cb8-80" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Log-likelihood</span></span>
+<span id="cb8-81"><a href="#cb8-81" aria-hidden="true" tabindex="-1"></a>    log_lik <span class="op">=</span> np.<span class="bu">sum</span>(</span>
+<span id="cb8-82"><a href="#cb8-82" aria-hidden="true" tabindex="-1"></a>        actions_flat <span class="op">*</span> np.log(p1) <span class="op">+</span> </span>
+<span id="cb8-83"><a href="#cb8-83" aria-hidden="true" tabindex="-1"></a>        (<span class="dv">1</span> <span class="op">-</span> actions_flat) <span class="op">*</span> np.log(<span class="dv">1</span> <span class="op">-</span> p1)</span>
+<span id="cb8-84"><a href="#cb8-84" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb8-85"><a href="#cb8-85" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb8-86"><a href="#cb8-86" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> log_lik</span>
+<span id="cb8-87"><a href="#cb8-87" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-88"><a href="#cb8-88" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-89"><a href="#cb8-89" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> estimate_mle(</span>
+<span id="cb8-90"><a href="#cb8-90" aria-hidden="true" tabindex="-1"></a>    data: PanelData,</span>
+<span id="cb8-91"><a href="#cb8-91" aria-hidden="true" tabindex="-1"></a>    theta_init: Tuple[<span class="bu">float</span>, <span class="bu">float</span>, <span class="bu">float</span>],</span>
+<span id="cb8-92"><a href="#cb8-92" aria-hidden="true" tabindex="-1"></a>    solver_params: Dict[<span class="bu">str</span>, Any],</span>
+<span id="cb8-93"><a href="#cb8-93" aria-hidden="true" tabindex="-1"></a>    maxiter: <span class="bu">int</span> <span class="op">=</span> <span class="dv">200</span>,</span>
+<span id="cb8-94"><a href="#cb8-94" aria-hidden="true" tabindex="-1"></a>    verbose: <span class="bu">bool</span> <span class="op">=</span> <span class="va">True</span>,</span>
+<span id="cb8-95"><a href="#cb8-95" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> EstimationResult:</span>
+<span id="cb8-96"><a href="#cb8-96" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
+<span id="cb8-97"><a href="#cb8-97" aria-hidden="true" tabindex="-1"></a><span class="co">    Estimate structural parameters via MLE using NFXP.</span></span>
+<span id="cb8-98"><a href="#cb8-98" aria-hidden="true" tabindex="-1"></a><span class="co">    </span></span>
+<span id="cb8-99"><a href="#cb8-99" aria-hidden="true" tabindex="-1"></a><span class="co">    Parameters</span></span>
+<span id="cb8-100"><a href="#cb8-100" aria-hidden="true" tabindex="-1"></a><span class="co">    ----------</span></span>
+<span id="cb8-101"><a href="#cb8-101" aria-hidden="true" tabindex="-1"></a><span class="co">    data : PanelData</span></span>
+<span id="cb8-102"><a href="#cb8-102" aria-hidden="true" tabindex="-1"></a><span class="co">        Panel data with states and actions</span></span>
+<span id="cb8-103"><a href="#cb8-103" aria-hidden="true" tabindex="-1"></a><span class="co">    theta_init : tuple</span></span>
+<span id="cb8-104"><a href="#cb8-104" aria-hidden="true" tabindex="-1"></a><span class="co">        Initial guess (beta, gamma, delta)</span></span>
+<span id="cb8-105"><a href="#cb8-105" aria-hidden="true" tabindex="-1"></a><span class="co">    solver_params : dict</span></span>
+<span id="cb8-106"><a href="#cb8-106" aria-hidden="true" tabindex="-1"></a><span class="co">        Solver hyperparameters</span></span>
+<span id="cb8-107"><a href="#cb8-107" aria-hidden="true" tabindex="-1"></a><span class="co">    maxiter : int</span></span>
+<span id="cb8-108"><a href="#cb8-108" aria-hidden="true" tabindex="-1"></a><span class="co">        Maximum outer loop iterations</span></span>
+<span id="cb8-109"><a href="#cb8-109" aria-hidden="true" tabindex="-1"></a><span class="co">    verbose : bool</span></span>
+<span id="cb8-110"><a href="#cb8-110" aria-hidden="true" tabindex="-1"></a><span class="co">        Print progress</span></span>
+<span id="cb8-111"><a href="#cb8-111" aria-hidden="true" tabindex="-1"></a><span class="co">    </span></span>
+<span id="cb8-112"><a href="#cb8-112" aria-hidden="true" tabindex="-1"></a><span class="co">    Returns</span></span>
+<span id="cb8-113"><a href="#cb8-113" aria-hidden="true" tabindex="-1"></a><span class="co">    -------</span></span>
+<span id="cb8-114"><a href="#cb8-114" aria-hidden="true" tabindex="-1"></a><span class="co">    EstimationResult</span></span>
+<span id="cb8-115"><a href="#cb8-115" aria-hidden="true" tabindex="-1"></a><span class="co">        Estimation results including estimates and standard errors</span></span>
+<span id="cb8-116"><a href="#cb8-116" aria-hidden="true" tabindex="-1"></a><span class="co">    """</span></span>
+<span id="cb8-117"><a href="#cb8-117" aria-hidden="true" tabindex="-1"></a>    theta_init <span class="op">=</span> np.array(theta_init)</span>
+<span id="cb8-118"><a href="#cb8-118" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb8-119"><a href="#cb8-119" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Track evaluations</span></span>
+<span id="cb8-120"><a href="#cb8-120" aria-hidden="true" tabindex="-1"></a>    eval_count <span class="op">=</span> [<span class="dv">0</span>]</span>
+<span id="cb8-121"><a href="#cb8-121" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb8-122"><a href="#cb8-122" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> neg_log_lik(theta):</span>
+<span id="cb8-123"><a href="#cb8-123" aria-hidden="true" tabindex="-1"></a>        eval_count[<span class="dv">0</span>] <span class="op">+=</span> <span class="dv">1</span></span>
+<span id="cb8-124"><a href="#cb8-124" aria-hidden="true" tabindex="-1"></a>        ll <span class="op">=</span> compute_log_likelihood(theta, data, solver_params)</span>
+<span id="cb8-125"><a href="#cb8-125" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> verbose <span class="kw">and</span> eval_count[<span class="dv">0</span>] <span class="op">%</span> <span class="dv">10</span> <span class="op">==</span> <span class="dv">0</span>:</span>
+<span id="cb8-126"><a href="#cb8-126" aria-hidden="true" tabindex="-1"></a>            <span class="bu">print</span>(<span class="ss">f"Eval </span><span class="sc">{</span>eval_count[<span class="dv">0</span>]<span class="sc">}</span><span class="ss">: theta=</span><span class="sc">{</span>theta<span class="sc">}</span><span class="ss">, LL=</span><span class="sc">{</span>ll<span class="sc">:.2f}</span><span class="ss">"</span>)</span>
+<span id="cb8-127"><a href="#cb8-127" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="op">-</span>ll</span>
+<span id="cb8-128"><a href="#cb8-128" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb8-129"><a href="#cb8-129" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Run optimization</span></span>
+<span id="cb8-130"><a href="#cb8-130" aria-hidden="true" tabindex="-1"></a>    result <span class="op">=</span> optimize.minimize(</span>
+<span id="cb8-131"><a href="#cb8-131" aria-hidden="true" tabindex="-1"></a>        neg_log_lik,</span>
+<span id="cb8-132"><a href="#cb8-132" aria-hidden="true" tabindex="-1"></a>        theta_init,</span>
+<span id="cb8-133"><a href="#cb8-133" aria-hidden="true" tabindex="-1"></a>        method<span class="op">=</span><span class="st">'Nelder-Mead'</span>,</span>
+<span id="cb8-134"><a href="#cb8-134" aria-hidden="true" tabindex="-1"></a>        options<span class="op">=</span>{</span>
+<span id="cb8-135"><a href="#cb8-135" aria-hidden="true" tabindex="-1"></a>            <span class="st">'maxiter'</span>: maxiter,</span>
+<span id="cb8-136"><a href="#cb8-136" aria-hidden="true" tabindex="-1"></a>            <span class="st">'xatol'</span>: <span class="fl">1e-4</span>,</span>
+<span id="cb8-137"><a href="#cb8-137" aria-hidden="true" tabindex="-1"></a>            <span class="st">'fatol'</span>: <span class="fl">1e-4</span>,</span>
+<span id="cb8-138"><a href="#cb8-138" aria-hidden="true" tabindex="-1"></a>            <span class="st">'disp'</span>: verbose,</span>
+<span id="cb8-139"><a href="#cb8-139" aria-hidden="true" tabindex="-1"></a>            <span class="st">'adaptive'</span>: <span class="va">True</span>,</span>
+<span id="cb8-140"><a href="#cb8-140" aria-hidden="true" tabindex="-1"></a>        }</span>
+<span id="cb8-141"><a href="#cb8-141" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb8-142"><a href="#cb8-142" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb8-143"><a href="#cb8-143" aria-hidden="true" tabindex="-1"></a>    theta_hat <span class="op">=</span> result.x</span>
+<span id="cb8-144"><a href="#cb8-144" aria-hidden="true" tabindex="-1"></a>    log_lik_hat <span class="op">=</span> <span class="op">-</span>result.fun</span>
+<span id="cb8-145"><a href="#cb8-145" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb8-146"><a href="#cb8-146" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Compute standard errors</span></span>
+<span id="cb8-147"><a href="#cb8-147" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> verbose:</span>
+<span id="cb8-148"><a href="#cb8-148" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="st">"Computing standard errors..."</span>)</span>
+<span id="cb8-149"><a href="#cb8-149" aria-hidden="true" tabindex="-1"></a>    std_errors, cov_matrix <span class="op">=</span> compute_standard_errors(</span>
+<span id="cb8-150"><a href="#cb8-150" aria-hidden="true" tabindex="-1"></a>        theta_hat, data, solver_params</span>
+<span id="cb8-151"><a href="#cb8-151" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb8-152"><a href="#cb8-152" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb8-153"><a href="#cb8-153" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> EstimationResult(</span>
+<span id="cb8-154"><a href="#cb8-154" aria-hidden="true" tabindex="-1"></a>        theta_hat<span class="op">=</span>theta_hat,</span>
+<span id="cb8-155"><a href="#cb8-155" aria-hidden="true" tabindex="-1"></a>        std_errors<span class="op">=</span>std_errors,</span>
+<span id="cb8-156"><a href="#cb8-156" aria-hidden="true" tabindex="-1"></a>        cov_matrix<span class="op">=</span>cov_matrix,</span>
+<span id="cb8-157"><a href="#cb8-157" aria-hidden="true" tabindex="-1"></a>        log_likelihood<span class="op">=</span>log_lik_hat,</span>
+<span id="cb8-158"><a href="#cb8-158" aria-hidden="true" tabindex="-1"></a>        n_iterations<span class="op">=</span>result.nit,</span>
+<span id="cb8-159"><a href="#cb8-159" aria-hidden="true" tabindex="-1"></a>        converged<span class="op">=</span>result.success,</span>
+<span id="cb8-160"><a href="#cb8-160" aria-hidden="true" tabindex="-1"></a>        optimization_result<span class="op">=</span>result,</span>
+<span id="cb8-161"><a href="#cb8-161" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb8-162"><a href="#cb8-162" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-163"><a href="#cb8-163" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-164"><a href="#cb8-164" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> compute_standard_errors(</span>
+<span id="cb8-165"><a href="#cb8-165" aria-hidden="true" tabindex="-1"></a>    theta_hat: np.ndarray,</span>
+<span id="cb8-166"><a href="#cb8-166" aria-hidden="true" tabindex="-1"></a>    data: PanelData,</span>
+<span id="cb8-167"><a href="#cb8-167" aria-hidden="true" tabindex="-1"></a>    solver_params: Dict[<span class="bu">str</span>, Any],</span>
+<span id="cb8-168"><a href="#cb8-168" aria-hidden="true" tabindex="-1"></a>    eps: <span class="bu">float</span> <span class="op">=</span> <span class="fl">1e-4</span>,</span>
+<span id="cb8-169"><a href="#cb8-169" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> Tuple[np.ndarray, np.ndarray]:</span>
+<span id="cb8-170"><a href="#cb8-170" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
+<span id="cb8-171"><a href="#cb8-171" aria-hidden="true" tabindex="-1"></a><span class="co">    Compute standard errors via numerical Hessian.</span></span>
+<span id="cb8-172"><a href="#cb8-172" aria-hidden="true" tabindex="-1"></a><span class="co">    </span></span>
+<span id="cb8-173"><a href="#cb8-173" aria-hidden="true" tabindex="-1"></a><span class="co">    Parameters</span></span>
+<span id="cb8-174"><a href="#cb8-174" aria-hidden="true" tabindex="-1"></a><span class="co">    ----------</span></span>
+<span id="cb8-175"><a href="#cb8-175" aria-hidden="true" tabindex="-1"></a><span class="co">    theta_hat : np.ndarray</span></span>
+<span id="cb8-176"><a href="#cb8-176" aria-hidden="true" tabindex="-1"></a><span class="co">        MLE estimates</span></span>
+<span id="cb8-177"><a href="#cb8-177" aria-hidden="true" tabindex="-1"></a><span class="co">    data : PanelData</span></span>
+<span id="cb8-178"><a href="#cb8-178" aria-hidden="true" tabindex="-1"></a><span class="co">        Panel data</span></span>
+<span id="cb8-179"><a href="#cb8-179" aria-hidden="true" tabindex="-1"></a><span class="co">    solver_params : dict</span></span>
+<span id="cb8-180"><a href="#cb8-180" aria-hidden="true" tabindex="-1"></a><span class="co">        Solver hyperparameters</span></span>
+<span id="cb8-181"><a href="#cb8-181" aria-hidden="true" tabindex="-1"></a><span class="co">    eps : float</span></span>
+<span id="cb8-182"><a href="#cb8-182" aria-hidden="true" tabindex="-1"></a><span class="co">        Step size for finite differences</span></span>
+<span id="cb8-183"><a href="#cb8-183" aria-hidden="true" tabindex="-1"></a><span class="co">    </span></span>
+<span id="cb8-184"><a href="#cb8-184" aria-hidden="true" tabindex="-1"></a><span class="co">    Returns</span></span>
+<span id="cb8-185"><a href="#cb8-185" aria-hidden="true" tabindex="-1"></a><span class="co">    -------</span></span>
+<span id="cb8-186"><a href="#cb8-186" aria-hidden="true" tabindex="-1"></a><span class="co">    std_errors : np.ndarray</span></span>
+<span id="cb8-187"><a href="#cb8-187" aria-hidden="true" tabindex="-1"></a><span class="co">        Standard errors for each parameter</span></span>
+<span id="cb8-188"><a href="#cb8-188" aria-hidden="true" tabindex="-1"></a><span class="co">    cov_matrix : np.ndarray</span></span>
+<span id="cb8-189"><a href="#cb8-189" aria-hidden="true" tabindex="-1"></a><span class="co">        Variance-covariance matrix</span></span>
+<span id="cb8-190"><a href="#cb8-190" aria-hidden="true" tabindex="-1"></a><span class="co">    """</span></span>
+<span id="cb8-191"><a href="#cb8-191" aria-hidden="true" tabindex="-1"></a>    n_params <span class="op">=</span> <span class="bu">len</span>(theta_hat)</span>
+<span id="cb8-192"><a href="#cb8-192" aria-hidden="true" tabindex="-1"></a>    hessian <span class="op">=</span> np.zeros((n_params, n_params))</span>
+<span id="cb8-193"><a href="#cb8-193" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb8-194"><a href="#cb8-194" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(n_params):</span>
+<span id="cb8-195"><a href="#cb8-195" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> j <span class="kw">in</span> <span class="bu">range</span>(i, n_params):  <span class="co"># Exploit symmetry</span></span>
+<span id="cb8-196"><a href="#cb8-196" aria-hidden="true" tabindex="-1"></a>            theta_pp <span class="op">=</span> theta_hat.copy()</span>
+<span id="cb8-197"><a href="#cb8-197" aria-hidden="true" tabindex="-1"></a>            theta_pp[i] <span class="op">+=</span> eps</span>
+<span id="cb8-198"><a href="#cb8-198" aria-hidden="true" tabindex="-1"></a>            theta_pp[j] <span class="op">+=</span> eps</span>
+<span id="cb8-199"><a href="#cb8-199" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb8-200"><a href="#cb8-200" aria-hidden="true" tabindex="-1"></a>            theta_pm <span class="op">=</span> theta_hat.copy()</span>
+<span id="cb8-201"><a href="#cb8-201" aria-hidden="true" tabindex="-1"></a>            theta_pm[i] <span class="op">+=</span> eps</span>
+<span id="cb8-202"><a href="#cb8-202" aria-hidden="true" tabindex="-1"></a>            theta_pm[j] <span class="op">-=</span> eps</span>
+<span id="cb8-203"><a href="#cb8-203" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb8-204"><a href="#cb8-204" aria-hidden="true" tabindex="-1"></a>            theta_mp <span class="op">=</span> theta_hat.copy()</span>
+<span id="cb8-205"><a href="#cb8-205" aria-hidden="true" tabindex="-1"></a>            theta_mp[i] <span class="op">-=</span> eps</span>
+<span id="cb8-206"><a href="#cb8-206" aria-hidden="true" tabindex="-1"></a>            theta_mp[j] <span class="op">+=</span> eps</span>
+<span id="cb8-207"><a href="#cb8-207" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb8-208"><a href="#cb8-208" aria-hidden="true" tabindex="-1"></a>            theta_mm <span class="op">=</span> theta_hat.copy()</span>
+<span id="cb8-209"><a href="#cb8-209" aria-hidden="true" tabindex="-1"></a>            theta_mm[i] <span class="op">-=</span> eps</span>
+<span id="cb8-210"><a href="#cb8-210" aria-hidden="true" tabindex="-1"></a>            theta_mm[j] <span class="op">-=</span> eps</span>
+<span id="cb8-211"><a href="#cb8-211" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb8-212"><a href="#cb8-212" aria-hidden="true" tabindex="-1"></a>            f_pp <span class="op">=</span> compute_log_likelihood(theta_pp, data, solver_params)</span>
+<span id="cb8-213"><a href="#cb8-213" aria-hidden="true" tabindex="-1"></a>            f_pm <span class="op">=</span> compute_log_likelihood(theta_pm, data, solver_params)</span>
+<span id="cb8-214"><a href="#cb8-214" aria-hidden="true" tabindex="-1"></a>            f_mp <span class="op">=</span> compute_log_likelihood(theta_mp, data, solver_params)</span>
+<span id="cb8-215"><a href="#cb8-215" aria-hidden="true" tabindex="-1"></a>            f_mm <span class="op">=</span> compute_log_likelihood(theta_mm, data, solver_params)</span>
+<span id="cb8-216"><a href="#cb8-216" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb8-217"><a href="#cb8-217" aria-hidden="true" tabindex="-1"></a>            hessian[i, j] <span class="op">=</span> (f_pp <span class="op">-</span> f_pm <span class="op">-</span> f_mp <span class="op">+</span> f_mm) <span class="op">/</span> (<span class="dv">4</span> <span class="op">*</span> eps <span class="op">*</span> eps)</span>
+<span id="cb8-218"><a href="#cb8-218" aria-hidden="true" tabindex="-1"></a>            hessian[j, i] <span class="op">=</span> hessian[i, j]  <span class="co"># Symmetric</span></span>
+<span id="cb8-219"><a href="#cb8-219" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb8-220"><a href="#cb8-220" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Information matrix = -Hessian</span></span>
+<span id="cb8-221"><a href="#cb8-221" aria-hidden="true" tabindex="-1"></a>    info_matrix <span class="op">=</span> <span class="op">-</span>hessian</span>
+<span id="cb8-222"><a href="#cb8-222" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb8-223"><a href="#cb8-223" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Covariance = inverse of information matrix</span></span>
+<span id="cb8-224"><a href="#cb8-224" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span>:</span>
+<span id="cb8-225"><a href="#cb8-225" aria-hidden="true" tabindex="-1"></a>        cov_matrix <span class="op">=</span> np.linalg.inv(info_matrix)</span>
+<span id="cb8-226"><a href="#cb8-226" aria-hidden="true" tabindex="-1"></a>        std_errors <span class="op">=</span> np.sqrt(np.diag(cov_matrix))</span>
+<span id="cb8-227"><a href="#cb8-227" aria-hidden="true" tabindex="-1"></a>    <span class="cf">except</span> np.linalg.LinAlgError:</span>
+<span id="cb8-228"><a href="#cb8-228" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Singular matrix - return NaN</span></span>
+<span id="cb8-229"><a href="#cb8-229" aria-hidden="true" tabindex="-1"></a>        cov_matrix <span class="op">=</span> np.full((n_params, n_params), np.nan)</span>
+<span id="cb8-230"><a href="#cb8-230" aria-hidden="true" tabindex="-1"></a>        std_errors <span class="op">=</span> np.full(n_params, np.nan)</span>
+<span id="cb8-231"><a href="#cb8-231" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb8-232"><a href="#cb8-232" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> std_errors, cov_matrix</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
 <section id="step-2-add-tests" class="level3">
 <h3 class="anchored" data-anchor-id="step-2-add-tests">Step 2: Add Tests</h3>
@@ -857,23 +1004,432 @@ test/mdp_estimator/
 </section>
 <section id="step-3-integration-in-quarto-report" class="level3">
 <h3 class="anchored" data-anchor-id="step-3-integration-in-quarto-report">Step 3: Integration in Quarto Report</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># In estimate_mdp.qmd</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Load simulated data</span></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> mdp_simulator <span class="im">import</span> simulate_mdp_panel</span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> mdp_estimator <span class="im">import</span> estimate_mle, EstimationResult</span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Simulate data at true parameters</span></span>
-<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>data <span class="op">=</span> simulate_mdp_panel(...)</span>
-<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Estimate with perturbed initial values</span></span>
-<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>theta_init <span class="op">=</span> (beta <span class="op">*</span> <span class="fl">1.2</span>, gamma <span class="op">*</span> <span class="fl">0.8</span>, delta <span class="op">*</span> <span class="fl">0.95</span>)  <span class="co"># Perturbed</span></span>
-<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>result <span class="op">=</span> estimate_mle(data, theta_init, solver_params)</span>
-<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a><span class="co"># Display results</span></span>
-<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"True:      β=</span><span class="sc">{</span>beta<span class="sc">:.3f}</span><span class="ss">, γ=</span><span class="sc">{</span>gamma<span class="sc">:.3f}</span><span class="ss">, δ=</span><span class="sc">{</span>delta<span class="sc">:.3f}</span><span class="ss">"</span>)</span>
-<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Estimated: β=</span><span class="sc">{</span>result<span class="sc">.</span>theta_hat[<span class="dv">0</span>]<span class="sc">:.3f}</span><span class="ss">, γ=</span><span class="sc">{</span>result<span class="sc">.</span>theta_hat[<span class="dv">1</span>]<span class="sc">:.3f}</span><span class="ss">, δ=</span><span class="sc">{</span>result<span class="sc">.</span>theta_hat[<span class="dv">2</span>]<span class="sc">:.3f}</span><span class="ss">"</span>)</span>
-<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Std Err:   (</span><span class="sc">{</span>result<span class="sc">.</span>std_errors[<span class="dv">0</span>]<span class="sc">:.3f}</span><span class="ss">, </span><span class="sc">{</span>result<span class="sc">.</span>std_errors[<span class="dv">1</span>]<span class="sc">:.3f}</span><span class="ss">, </span><span class="sc">{</span>result<span class="sc">.</span>std_errors[<span class="dv">2</span>]<span class="sc">:.3f}</span><span class="ss">)"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># In estimate_mdp.qmd</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Load simulated data</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> mdp_simulator <span class="im">import</span> simulate_mdp_panel</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> mdp_estimator <span class="im">import</span> estimate_mle, EstimationResult</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Simulate data at true parameters</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>data <span class="op">=</span> simulate_mdp_panel(...)</span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Estimate with perturbed initial values</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>theta_init <span class="op">=</span> (beta <span class="op">*</span> <span class="fl">1.2</span>, gamma <span class="op">*</span> <span class="fl">0.8</span>, delta <span class="op">*</span> <span class="fl">0.95</span>)  <span class="co"># Perturbed</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>result <span class="op">=</span> estimate_mle(data, theta_init, solver_params)</span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a><span class="co"># Display results</span></span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"True:      β=</span><span class="sc">{</span>beta<span class="sc">:.3f}</span><span class="ss">, γ=</span><span class="sc">{</span>gamma<span class="sc">:.3f}</span><span class="ss">, δ=</span><span class="sc">{</span>delta<span class="sc">:.3f}</span><span class="ss">"</span>)</span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Estimated: β=</span><span class="sc">{</span>result<span class="sc">.</span>theta_hat[<span class="dv">0</span>]<span class="sc">:.3f}</span><span class="ss">, γ=</span><span class="sc">{</span>result<span class="sc">.</span>theta_hat[<span class="dv">1</span>]<span class="sc">:.3f}</span><span class="ss">, δ=</span><span class="sc">{</span>result<span class="sc">.</span>theta_hat[<span class="dv">2</span>]<span class="sc">:.3f}</span><span class="ss">"</span>)</span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Std Err:   (</span><span class="sc">{</span>result<span class="sc">.</span>std_errors[<span class="dv">0</span>]<span class="sc">:.3f}</span><span class="ss">, </span><span class="sc">{</span>result<span class="sc">.</span>std_errors[<span class="dv">1</span>]<span class="sc">:.3f}</span><span class="ss">, </span><span class="sc">{</span>result<span class="sc">.</span>std_errors[<span class="dv">2</span>]<span class="sc">:.3f}</span><span class="ss">)"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+</section>
+<section id="implementation" class="level2">
+<h2 class="anchored" data-anchor-id="implementation">Implementation</h2>
+<section id="setup" class="level3">
+<h3 class="anchored" data-anchor-id="setup">Setup</h3>
+<div id="setup" class="cell" data-execution_count="1">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> json</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Add paths for local modules</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>sys.path.insert(<span class="dv">0</span>, <span class="st">'../../src'</span>)</span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>sys.path.insert(<span class="dv">0</span>, <span class="st">'../config_mdp'</span>)</span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Import configuration</span></span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> config <span class="im">import</span> (</span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>    beta <span class="im">as</span> true_beta,</span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>    gamma <span class="im">as</span> true_gamma,</span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>    delta <span class="im">as</span> true_delta,</span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>    s_min, s_max,</span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>    hidden_sizes,</span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a>    learning_rate,</span>
+<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a>    batch_size,</span>
+<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a>    tolerance,</span>
+<span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a>    max_iterations,</span>
+<span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a>    target_update_freq,</span>
+<span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-24"><a href="#cb10-24" aria-hidden="true" tabindex="-1"></a><span class="co"># Import estimator</span></span>
+<span id="cb10-25"><a href="#cb10-25" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> mdp_estimator <span class="im">import</span> grid_search_mle, EstimationResult</span>
+<span id="cb10-26"><a href="#cb10-26" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> mdp_simulator <span class="im">import</span> PanelData</span>
+<span id="cb10-27"><a href="#cb10-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-28"><a href="#cb10-28" aria-hidden="true" tabindex="-1"></a><span class="co"># Paths</span></span>
+<span id="cb10-29"><a href="#cb10-29" aria-hidden="true" tabindex="-1"></a>SIMULATE_OUTPUT_PATH <span class="op">=</span> <span class="st">'../../output/simulate_mdp'</span></span>
+<span id="cb10-30"><a href="#cb10-30" aria-hidden="true" tabindex="-1"></a>SOLVER_OUTPUT_PATH <span class="op">=</span> <span class="st">'../../output/solve_mdp'</span></span>
+<span id="cb10-31"><a href="#cb10-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-32"><a href="#cb10-32" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"Setup complete."</span>)</span>
+<span id="cb10-33"><a href="#cb10-33" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"True parameters: β=</span><span class="sc">{</span>true_beta<span class="sc">}</span><span class="ss">, γ=</span><span class="sc">{</span>true_gamma<span class="sc">}</span><span class="ss">, δ=</span><span class="sc">{</span>true_delta<span class="sc">}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>Setup complete.
+True parameters: β=1.0, γ=0.1, δ=0.95</code></pre>
+</div>
+</div>
+</section>
+<section id="load-simulated-data" class="level3">
+<h3 class="anchored" data-anchor-id="load-simulated-data">Load Simulated Data</h3>
+<div id="load-data" class="cell" data-execution_count="2">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Load simulated panel data</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>states <span class="op">=</span> np.load(<span class="ss">f'</span><span class="sc">{</span>SIMULATE_OUTPUT_PATH<span class="sc">}</span><span class="ss">/states.npy'</span>)</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>actions <span class="op">=</span> np.load(<span class="ss">f'</span><span class="sc">{</span>SIMULATE_OUTPUT_PATH<span class="sc">}</span><span class="ss">/actions.npy'</span>)</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>rewards <span class="op">=</span> np.load(<span class="ss">f'</span><span class="sc">{</span>SIMULATE_OUTPUT_PATH<span class="sc">}</span><span class="ss">/rewards.npy'</span>)</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Load simulation config</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> <span class="bu">open</span>(<span class="ss">f'</span><span class="sc">{</span>SIMULATE_OUTPUT_PATH<span class="sc">}</span><span class="ss">/config.json'</span>, <span class="st">'r'</span>) <span class="im">as</span> f:</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    sim_config <span class="op">=</span> json.load(f)</span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>n_agents <span class="op">=</span> states.shape[<span class="dv">0</span>]</span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>n_periods <span class="op">=</span> states.shape[<span class="dv">1</span>]</span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a><span class="co"># Create PanelData object</span></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>panel_data <span class="op">=</span> PanelData(</span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>    states<span class="op">=</span>states,</span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>    actions<span class="op">=</span>actions,</span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>    rewards<span class="op">=</span>rewards,</span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>    n_agents<span class="op">=</span>n_agents,</span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>    n_periods<span class="op">=</span>n_periods,</span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Loaded panel data:"</span>)</span>
+<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"  N agents:  </span><span class="sc">{</span>n_agents<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"  T periods: </span><span class="sc">{</span>n_periods<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"  Total observations: </span><span class="sc">{</span>n_agents <span class="op">*</span> n_periods<span class="sc">}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Loaded panel data:
+  N agents:  100
+  T periods: 100
+  Total observations: 10000</code></pre>
+</div>
+</div>
+</section>
+<section id="true-parameters-ground-truth" class="level3">
+<h3 class="anchored" data-anchor-id="true-parameters-ground-truth">True Parameters (Ground Truth)</h3>
+<div id="true-params" class="cell" data-execution_count="3">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"="</span> <span class="op">*</span> <span class="dv">50</span>)</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"TRUE PARAMETERS (Data-Generating Process)"</span>)</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"="</span> <span class="op">*</span> <span class="dv">50</span>)</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"  β (reward coefficient):  </span><span class="sc">{</span>true_beta<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"  γ (state decay rate):    </span><span class="sc">{</span>true_gamma<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"  δ (discount factor):     </span><span class="sc">{</span>true_delta<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"="</span> <span class="op">*</span> <span class="dv">50</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>==================================================
+TRUE PARAMETERS (Data-Generating Process)
+==================================================
+  β (reward coefficient):  1.0
+  γ (state decay rate):    0.1
+  δ (discount factor):     0.95
+==================================================</code></pre>
+</div>
+</div>
+</section>
+<section id="grid-search-estimation" class="level3">
+<h3 class="anchored" data-anchor-id="grid-search-estimation">Grid Search Estimation</h3>
+<div id="grid-search" class="cell" data-execution_count="4">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Solver parameters for inner loop</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>solver_params <span class="op">=</span> {</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    <span class="st">'s_min'</span>: s_min,</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">'s_max'</span>: s_max,</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">'hidden_sizes'</span>: hidden_sizes,</span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    <span class="st">'learning_rate'</span>: learning_rate,</span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>    <span class="st">'batch_size'</span>: batch_size,</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>    <span class="st">'tolerance'</span>: tolerance,</span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>    <span class="st">'max_iterations'</span>: max_iterations,</span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>    <span class="st">'target_update_freq'</span>: target_update_freq,</span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a><span class="co"># Grid search bounds (centered around true values with reasonable range)</span></span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a>bounds <span class="op">=</span> {</span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>    <span class="st">'beta'</span>: (<span class="fl">0.5</span>, <span class="fl">1.5</span>),      <span class="co"># True: 1.0</span></span>
+<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a>    <span class="st">'gamma'</span>: (<span class="fl">0.05</span>, <span class="fl">0.20</span>),   <span class="co"># True: 0.1</span></span>
+<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a>    <span class="st">'delta'</span>: (<span class="fl">0.90</span>, <span class="fl">0.99</span>),   <span class="co"># True: 0.95</span></span>
+<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb16-19"><a href="#cb16-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-20"><a href="#cb16-20" aria-hidden="true" tabindex="-1"></a><span class="co"># Number of grid points per dimension</span></span>
+<span id="cb16-21"><a href="#cb16-21" aria-hidden="true" tabindex="-1"></a>n_points <span class="op">=</span> <span class="dv">5</span>  <span class="co"># 5^3 = 125 evaluations</span></span>
+<span id="cb16-22"><a href="#cb16-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-23"><a href="#cb16-23" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"Starting grid search estimation..."</span>)</span>
+<span id="cb16-24"><a href="#cb16-24" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Grid: </span><span class="sc">{</span>n_points<span class="sc">}</span><span class="ss"> points per dimension = </span><span class="sc">{</span>n_points<span class="op">**</span><span class="dv">3</span><span class="sc">}</span><span class="ss"> total evaluations"</span>)</span>
+<span id="cb16-25"><a href="#cb16-25" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Using warm-start from: </span><span class="sc">{</span>SOLVER_OUTPUT_PATH<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb16-26"><a href="#cb16-26" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>()</span>
+<span id="cb16-27"><a href="#cb16-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-28"><a href="#cb16-28" aria-hidden="true" tabindex="-1"></a><span class="co"># Run grid search with warm-start</span></span>
+<span id="cb16-29"><a href="#cb16-29" aria-hidden="true" tabindex="-1"></a>result <span class="op">=</span> grid_search_mle(</span>
+<span id="cb16-30"><a href="#cb16-30" aria-hidden="true" tabindex="-1"></a>    data<span class="op">=</span>panel_data,</span>
+<span id="cb16-31"><a href="#cb16-31" aria-hidden="true" tabindex="-1"></a>    bounds<span class="op">=</span>bounds,</span>
+<span id="cb16-32"><a href="#cb16-32" aria-hidden="true" tabindex="-1"></a>    n_points<span class="op">=</span>n_points,</span>
+<span id="cb16-33"><a href="#cb16-33" aria-hidden="true" tabindex="-1"></a>    solver_params<span class="op">=</span>solver_params,</span>
+<span id="cb16-34"><a href="#cb16-34" aria-hidden="true" tabindex="-1"></a>    verbose<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb16-35"><a href="#cb16-35" aria-hidden="true" tabindex="-1"></a>    compute_se<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb16-36"><a href="#cb16-36" aria-hidden="true" tabindex="-1"></a>    pretrained_path<span class="op">=</span>SOLVER_OUTPUT_PATH,</span>
+<span id="cb16-37"><a href="#cb16-37" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb16-38"><a href="#cb16-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-39"><a href="#cb16-39" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">Grid search completed!"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Starting grid search estimation...
+Grid: 5 points per dimension = 125 total evaluations
+Using warm-start from: ../../output/solve_mdp
+
+Loaded pre-trained networks from ../../output/solve_mdp for warm-starting
+Grid search: 5 points per dimension = 125 total evaluations
+  beta  in [0.500, 1.500]
+  gamma in [0.050, 0.200]
+  delta in [0.900, 0.990]
+  Eval 10/125: best LL = -6891.97
+  Eval 20/125: best LL = -6891.97
+  Eval 30/125: best LL = -6874.39
+  Eval 40/125: best LL = -6874.39
+  Eval 50/125: best LL = -6874.39</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>/Users/kissshot894/Documents/HKUST/RA/MDP_Practice/scripts/estimate_mdp/../../src/mdp_estimator/mdp_estimator.py:125: UserWarning: Inner loop did not converge for theta = [1.   0.05 0.99]
+  warnings.warn(f"Inner loop did not converge for theta = {theta}")
+/Users/kissshot894/Documents/HKUST/RA/MDP_Practice/scripts/estimate_mdp/../../src/mdp_estimator/mdp_estimator.py:125: UserWarning: Inner loop did not converge for theta = [1.     0.0875 0.99  ]
+  warnings.warn(f"Inner loop did not converge for theta = {theta}")</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>  Eval 60/125: best LL = -6874.39</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>/Users/kissshot894/Documents/HKUST/RA/MDP_Practice/scripts/estimate_mdp/../../src/mdp_estimator/mdp_estimator.py:125: UserWarning: Inner loop did not converge for theta = [1.    0.125 0.99 ]
+  warnings.warn(f"Inner loop did not converge for theta = {theta}")
+/Users/kissshot894/Documents/HKUST/RA/MDP_Practice/scripts/estimate_mdp/../../src/mdp_estimator/mdp_estimator.py:125: UserWarning: Inner loop did not converge for theta = [1.     0.1625 0.99  ]
+  warnings.warn(f"Inner loop did not converge for theta = {theta}")</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>  Eval 70/125: best LL = -6874.39</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>/Users/kissshot894/Documents/HKUST/RA/MDP_Practice/scripts/estimate_mdp/../../src/mdp_estimator/mdp_estimator.py:125: UserWarning: Inner loop did not converge for theta = [1.   0.2  0.99]
+  warnings.warn(f"Inner loop did not converge for theta = {theta}")
+/Users/kissshot894/Documents/HKUST/RA/MDP_Practice/scripts/estimate_mdp/../../src/mdp_estimator/mdp_estimator.py:125: UserWarning: Inner loop did not converge for theta = [1.25 0.05 0.99]
+  warnings.warn(f"Inner loop did not converge for theta = {theta}")</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>  Eval 80/125: best LL = -6874.39</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>/Users/kissshot894/Documents/HKUST/RA/MDP_Practice/scripts/estimate_mdp/../../src/mdp_estimator/mdp_estimator.py:125: UserWarning: Inner loop did not converge for theta = [1.25   0.0875 0.99  ]
+  warnings.warn(f"Inner loop did not converge for theta = {theta}")
+/Users/kissshot894/Documents/HKUST/RA/MDP_Practice/scripts/estimate_mdp/../../src/mdp_estimator/mdp_estimator.py:125: UserWarning: Inner loop did not converge for theta = [1.25  0.125 0.99 ]
+  warnings.warn(f"Inner loop did not converge for theta = {theta}")</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>  Eval 90/125: best LL = -6873.35</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>/Users/kissshot894/Documents/HKUST/RA/MDP_Practice/scripts/estimate_mdp/../../src/mdp_estimator/mdp_estimator.py:125: UserWarning: Inner loop did not converge for theta = [1.25   0.1625 0.99  ]
+  warnings.warn(f"Inner loop did not converge for theta = {theta}")
+/Users/kissshot894/Documents/HKUST/RA/MDP_Practice/scripts/estimate_mdp/../../src/mdp_estimator/mdp_estimator.py:125: UserWarning: Inner loop did not converge for theta = [1.25 0.2  0.99]
+  warnings.warn(f"Inner loop did not converge for theta = {theta}")</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>  Eval 100/125: best LL = -6873.35</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>/Users/kissshot894/Documents/HKUST/RA/MDP_Practice/scripts/estimate_mdp/../../src/mdp_estimator/mdp_estimator.py:125: UserWarning: Inner loop did not converge for theta = [1.5    0.05   0.9675]
+  warnings.warn(f"Inner loop did not converge for theta = {theta}")
+/Users/kissshot894/Documents/HKUST/RA/MDP_Practice/scripts/estimate_mdp/../../src/mdp_estimator/mdp_estimator.py:125: UserWarning: Inner loop did not converge for theta = [1.5  0.05 0.99]
+  warnings.warn(f"Inner loop did not converge for theta = {theta}")
+/Users/kissshot894/Documents/HKUST/RA/MDP_Practice/scripts/estimate_mdp/../../src/mdp_estimator/mdp_estimator.py:125: UserWarning: Inner loop did not converge for theta = [1.5    0.0875 0.9675]
+  warnings.warn(f"Inner loop did not converge for theta = {theta}")
+/Users/kissshot894/Documents/HKUST/RA/MDP_Practice/scripts/estimate_mdp/../../src/mdp_estimator/mdp_estimator.py:125: UserWarning: Inner loop did not converge for theta = [1.5    0.0875 0.99  ]
+  warnings.warn(f"Inner loop did not converge for theta = {theta}")</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>  Eval 110/125: best LL = -6872.82</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>/Users/kissshot894/Documents/HKUST/RA/MDP_Practice/scripts/estimate_mdp/../../src/mdp_estimator/mdp_estimator.py:125: UserWarning: Inner loop did not converge for theta = [1.5   0.125 0.99 ]
+  warnings.warn(f"Inner loop did not converge for theta = {theta}")
+/Users/kissshot894/Documents/HKUST/RA/MDP_Practice/scripts/estimate_mdp/../../src/mdp_estimator/mdp_estimator.py:125: UserWarning: Inner loop did not converge for theta = [1.5    0.1625 0.99  ]
+  warnings.warn(f"Inner loop did not converge for theta = {theta}")</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>  Eval 120/125: best LL = -6872.74</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>/Users/kissshot894/Documents/HKUST/RA/MDP_Practice/scripts/estimate_mdp/../../src/mdp_estimator/mdp_estimator.py:125: UserWarning: Inner loop did not converge for theta = [1.5  0.2  0.99]
+  warnings.warn(f"Inner loop did not converge for theta = {theta}")</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+Grid search complete.
+  Best theta: beta=1.5000, gamma=0.1625, delta=0.9225
+  Best LL: -6872.74
+Computing standard errors...
+
+Grid search completed!</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>/Users/kissshot894/Documents/HKUST/RA/MDP_Practice/scripts/estimate_mdp/../../src/mdp_estimator/mdp_estimator.py:474: RuntimeWarning: invalid value encountered in sqrt
+  std_errors = np.sqrt(np.diag(cov_matrix))</code></pre>
+</div>
+</div>
+</section>
+<section id="estimation-results" class="level3">
+<h3 class="anchored" data-anchor-id="estimation-results">Estimation Results</h3>
+<div id="results" class="cell" data-execution_count="5">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb35"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb35-2"><a href="#cb35-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb35-3"><a href="#cb35-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Extract results</span></span>
+<span id="cb35-4"><a href="#cb35-4" aria-hidden="true" tabindex="-1"></a>beta_hat, gamma_hat, delta_hat <span class="op">=</span> result.theta_hat</span>
+<span id="cb35-5"><a href="#cb35-5" aria-hidden="true" tabindex="-1"></a>se_beta, se_gamma, se_delta <span class="op">=</span> result.std_errors</span>
+<span id="cb35-6"><a href="#cb35-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb35-7"><a href="#cb35-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Create results table</span></span>
+<span id="cb35-8"><a href="#cb35-8" aria-hidden="true" tabindex="-1"></a>results_df <span class="op">=</span> pd.DataFrame({</span>
+<span id="cb35-9"><a href="#cb35-9" aria-hidden="true" tabindex="-1"></a>    <span class="st">'Parameter'</span>: [<span class="st">'β (reward)'</span>, <span class="st">'γ (decay)'</span>, <span class="st">'δ (discount)'</span>],</span>
+<span id="cb35-10"><a href="#cb35-10" aria-hidden="true" tabindex="-1"></a>    <span class="st">'True'</span>: [true_beta, true_gamma, true_delta],</span>
+<span id="cb35-11"><a href="#cb35-11" aria-hidden="true" tabindex="-1"></a>    <span class="st">'Estimated'</span>: [beta_hat, gamma_hat, delta_hat],</span>
+<span id="cb35-12"><a href="#cb35-12" aria-hidden="true" tabindex="-1"></a>    <span class="st">'Std. Error'</span>: [se_beta, se_gamma, se_delta],</span>
+<span id="cb35-13"><a href="#cb35-13" aria-hidden="true" tabindex="-1"></a>    <span class="st">'Bias'</span>: [beta_hat <span class="op">-</span> true_beta, gamma_hat <span class="op">-</span> true_gamma, delta_hat <span class="op">-</span> true_delta],</span>
+<span id="cb35-14"><a href="#cb35-14" aria-hidden="true" tabindex="-1"></a>    <span class="st">'Bias (%)'</span>: [</span>
+<span id="cb35-15"><a href="#cb35-15" aria-hidden="true" tabindex="-1"></a>        <span class="dv">100</span> <span class="op">*</span> (beta_hat <span class="op">-</span> true_beta) <span class="op">/</span> true_beta,</span>
+<span id="cb35-16"><a href="#cb35-16" aria-hidden="true" tabindex="-1"></a>        <span class="dv">100</span> <span class="op">*</span> (gamma_hat <span class="op">-</span> true_gamma) <span class="op">/</span> true_gamma,</span>
+<span id="cb35-17"><a href="#cb35-17" aria-hidden="true" tabindex="-1"></a>        <span class="dv">100</span> <span class="op">*</span> (delta_hat <span class="op">-</span> true_delta) <span class="op">/</span> true_delta,</span>
+<span id="cb35-18"><a href="#cb35-18" aria-hidden="true" tabindex="-1"></a>    ],</span>
+<span id="cb35-19"><a href="#cb35-19" aria-hidden="true" tabindex="-1"></a>})</span>
+<span id="cb35-20"><a href="#cb35-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb35-21"><a href="#cb35-21" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"="</span> <span class="op">*</span> <span class="dv">60</span>)</span>
+<span id="cb35-22"><a href="#cb35-22" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"ESTIMATION RESULTS"</span>)</span>
+<span id="cb35-23"><a href="#cb35-23" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"="</span> <span class="op">*</span> <span class="dv">60</span>)</span>
+<span id="cb35-24"><a href="#cb35-24" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(results_df.to_string(index<span class="op">=</span><span class="va">False</span>))</span>
+<span id="cb35-25"><a href="#cb35-25" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"="</span> <span class="op">*</span> <span class="dv">60</span>)</span>
+<span id="cb35-26"><a href="#cb35-26" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"</span><span class="ch">\n</span><span class="ss">Log-likelihood at optimum: </span><span class="sc">{</span>result<span class="sc">.</span>log_likelihood<span class="sc">:.2f}</span><span class="ss">"</span>)</span>
+<span id="cb35-27"><a href="#cb35-27" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Number of evaluations: </span><span class="sc">{</span>result<span class="sc">.</span>n_iterations<span class="sc">}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>============================================================
+ESTIMATION RESULTS
+============================================================
+   Parameter  True  Estimated  Std. Error    Bias  Bias (%)
+  β (reward)  1.00     1.5000    0.007742  0.5000 50.000000
+   γ (decay)  0.10     0.1625         NaN  0.0625 62.500000
+δ (discount)  0.95     0.9225    0.002060 -0.0275 -2.894737
+============================================================
+
+Log-likelihood at optimum: -6872.74
+Number of evaluations: 125</code></pre>
+</div>
+</div>
+</section>
+<section id="likelihood-at-true-parameters" class="level3">
+<h3 class="anchored" data-anchor-id="likelihood-at-true-parameters">Likelihood at True Parameters</h3>
+<div id="likelihood-check" class="cell" data-execution_count="6">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb37"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> mdp_estimator <span class="im">import</span> compute_log_likelihood</span>
+<span id="cb37-2"><a href="#cb37-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="cb37-3"><a href="#cb37-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
+<span id="cb37-4"><a href="#cb37-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-5"><a href="#cb37-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Load pre-trained networks for warm-start</span></span>
+<span id="cb37-6"><a href="#cb37-6" aria-hidden="true" tabindex="-1"></a>v0_init_state <span class="op">=</span> torch.load(<span class="ss">f'</span><span class="sc">{</span>SOLVER_OUTPUT_PATH<span class="sc">}</span><span class="ss">/v0_net.pt'</span>, weights_only<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb37-7"><a href="#cb37-7" aria-hidden="true" tabindex="-1"></a>v1_init_state <span class="op">=</span> torch.load(<span class="ss">f'</span><span class="sc">{</span>SOLVER_OUTPUT_PATH<span class="sc">}</span><span class="ss">/v1_net.pt'</span>, weights_only<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb37-8"><a href="#cb37-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-9"><a href="#cb37-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Compute log-likelihood at TRUE parameters</span></span>
+<span id="cb37-10"><a href="#cb37-10" aria-hidden="true" tabindex="-1"></a>theta_true <span class="op">=</span> np.array([true_beta, true_gamma, true_delta])</span>
+<span id="cb37-11"><a href="#cb37-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-12"><a href="#cb37-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Evaluating log-likelihood at true parameters: θ = </span><span class="sc">{</span>theta_true<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb37-13"><a href="#cb37-13" aria-hidden="true" tabindex="-1"></a>ll_true <span class="op">=</span> compute_log_likelihood(</span>
+<span id="cb37-14"><a href="#cb37-14" aria-hidden="true" tabindex="-1"></a>    theta<span class="op">=</span>theta_true,</span>
+<span id="cb37-15"><a href="#cb37-15" aria-hidden="true" tabindex="-1"></a>    data<span class="op">=</span>panel_data,</span>
+<span id="cb37-16"><a href="#cb37-16" aria-hidden="true" tabindex="-1"></a>    solver_params<span class="op">=</span>solver_params,</span>
+<span id="cb37-17"><a href="#cb37-17" aria-hidden="true" tabindex="-1"></a>    v0_init_state<span class="op">=</span>v0_init_state,</span>
+<span id="cb37-18"><a href="#cb37-18" aria-hidden="true" tabindex="-1"></a>    v1_init_state<span class="op">=</span>v1_init_state,</span>
+<span id="cb37-19"><a href="#cb37-19" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb37-20"><a href="#cb37-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-21"><a href="#cb37-21" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"</span><span class="ch">\n</span><span class="ss">Log-likelihood comparison:"</span>)</span>
+<span id="cb37-22"><a href="#cb37-22" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"  At TRUE parameters (β=</span><span class="sc">{</span>true_beta<span class="sc">}</span><span class="ss">, γ=</span><span class="sc">{</span>true_gamma<span class="sc">}</span><span class="ss">, δ=</span><span class="sc">{</span>true_delta<span class="sc">}</span><span class="ss">):  LL = </span><span class="sc">{</span>ll_true<span class="sc">:.2f}</span><span class="ss">"</span>)</span>
+<span id="cb37-23"><a href="#cb37-23" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"  At ESTIMATED parameters (β=</span><span class="sc">{</span>beta_hat<span class="sc">:.2f}</span><span class="ss">, γ=</span><span class="sc">{</span>gamma_hat<span class="sc">:.2f}</span><span class="ss">, δ=</span><span class="sc">{</span>delta_hat<span class="sc">:.2f}</span><span class="ss">): LL = </span><span class="sc">{</span>result<span class="sc">.</span>log_likelihood<span class="sc">:.2f}</span><span class="ss">"</span>)</span>
+<span id="cb37-24"><a href="#cb37-24" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"  Difference: </span><span class="sc">{</span>ll_true <span class="op">-</span> result<span class="sc">.</span>log_likelihood<span class="sc">:.2f}</span><span class="ss">"</span>)</span>
+<span id="cb37-25"><a href="#cb37-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-26"><a href="#cb37-26" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> ll_true <span class="op">&gt;</span> result.log_likelihood:</span>
+<span id="cb37-27"><a href="#cb37-27" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">⚠ TRUE parameters have HIGHER likelihood!"</span>)</span>
+<span id="cb37-28"><a href="#cb37-28" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"  → Grid search missed the true maximum (grid too coarse)"</span>)</span>
+<span id="cb37-29"><a href="#cb37-29" aria-hidden="true" tabindex="-1"></a><span class="cf">elif</span> <span class="bu">abs</span>(ll_true <span class="op">-</span> result.log_likelihood) <span class="op">&lt;</span> <span class="dv">10</span>:</span>
+<span id="cb37-30"><a href="#cb37-30" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">⚠ Likelihoods are SIMILAR (within 10 log-units)"</span>)</span>
+<span id="cb37-31"><a href="#cb37-31" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"  → Likelihood surface is FLAT - identification issues"</span>)</span>
+<span id="cb37-32"><a href="#cb37-32" aria-hidden="true" tabindex="-1"></a><span class="cf">else</span>:</span>
+<span id="cb37-33"><a href="#cb37-33" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">✓ Estimated parameters have higher likelihood"</span>)</span>
+<span id="cb37-34"><a href="#cb37-34" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"  → Model may be misspecified or data insufficient"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Evaluating log-likelihood at true parameters: θ = [1.   0.1  0.95]
+
+Log-likelihood comparison:
+  At TRUE parameters (β=1.0, γ=0.1, δ=0.95):  LL = -6875.13
+  At ESTIMATED parameters (β=1.50, γ=0.16, δ=0.92): LL = -6872.74
+  Difference: -2.39
+
+⚠ Likelihoods are SIMILAR (within 10 log-units)
+  → Likelihood surface is FLAT - identification issues</code></pre>
+</div>
+</div>
+</section>
+<section id="diagnostics" class="level3">
+<h3 class="anchored" data-anchor-id="diagnostics">Diagnostics</h3>
+<div id="diagnostics" class="cell" data-execution_count="7">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb39"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"="</span> <span class="op">*</span> <span class="dv">60</span>)</span>
+<span id="cb39-2"><a href="#cb39-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"DIAGNOSTICS"</span>)</span>
+<span id="cb39-3"><a href="#cb39-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"="</span> <span class="op">*</span> <span class="dv">60</span>)</span>
+<span id="cb39-4"><a href="#cb39-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb39-5"><a href="#cb39-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Check if estimates are within 2 standard errors of true values</span></span>
+<span id="cb39-6"><a href="#cb39-6" aria-hidden="true" tabindex="-1"></a>within_2se <span class="op">=</span> []</span>
+<span id="cb39-7"><a href="#cb39-7" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i, (name, true_val, est_val, se) <span class="kw">in</span> <span class="bu">enumerate</span>([</span>
+<span id="cb39-8"><a href="#cb39-8" aria-hidden="true" tabindex="-1"></a>    (<span class="st">'β'</span>, true_beta, beta_hat, se_beta),</span>
+<span id="cb39-9"><a href="#cb39-9" aria-hidden="true" tabindex="-1"></a>    (<span class="st">'γ'</span>, true_gamma, gamma_hat, se_gamma),</span>
+<span id="cb39-10"><a href="#cb39-10" aria-hidden="true" tabindex="-1"></a>    (<span class="st">'δ'</span>, true_delta, delta_hat, se_delta),</span>
+<span id="cb39-11"><a href="#cb39-11" aria-hidden="true" tabindex="-1"></a>]):</span>
+<span id="cb39-12"><a href="#cb39-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> np.isnan(se):</span>
+<span id="cb39-13"><a href="#cb39-13" aria-hidden="true" tabindex="-1"></a>        status <span class="op">=</span> <span class="st">"SE not available"</span></span>
+<span id="cb39-14"><a href="#cb39-14" aria-hidden="true" tabindex="-1"></a>        within <span class="op">=</span> <span class="va">None</span></span>
+<span id="cb39-15"><a href="#cb39-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
+<span id="cb39-16"><a href="#cb39-16" aria-hidden="true" tabindex="-1"></a>        diff <span class="op">=</span> <span class="bu">abs</span>(est_val <span class="op">-</span> true_val)</span>
+<span id="cb39-17"><a href="#cb39-17" aria-hidden="true" tabindex="-1"></a>        within <span class="op">=</span> diff <span class="op">&lt;=</span> <span class="dv">2</span> <span class="op">*</span> se</span>
+<span id="cb39-18"><a href="#cb39-18" aria-hidden="true" tabindex="-1"></a>        status <span class="op">=</span> <span class="st">"✓ Yes"</span> <span class="cf">if</span> within <span class="cf">else</span> <span class="st">"✗ No"</span></span>
+<span id="cb39-19"><a href="#cb39-19" aria-hidden="true" tabindex="-1"></a>    within_2se.append(within)</span>
+<span id="cb39-20"><a href="#cb39-20" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"  </span><span class="sc">{</span>name<span class="sc">}</span><span class="ss">: |</span><span class="sc">{</span>est_val<span class="sc">:.4f}</span><span class="ss"> - </span><span class="sc">{</span>true_val<span class="sc">:.4f}</span><span class="ss">| = </span><span class="sc">{</span><span class="bu">abs</span>(est_val <span class="op">-</span> true_val)<span class="sc">:.4f}</span><span class="ss"> "</span></span>
+<span id="cb39-21"><a href="#cb39-21" aria-hidden="true" tabindex="-1"></a>          <span class="ss">f"</span><span class="sc">{</span><span class="st">'&lt;='</span> <span class="cf">if</span> within <span class="cf">else</span> <span class="st">'&gt;'</span><span class="sc">}</span><span class="ss"> 2×SE=</span><span class="sc">{</span><span class="dv">2</span><span class="op">*</span>se<span class="sc">:.4f}</span><span class="ss"> → </span><span class="sc">{</span>status<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb39-22"><a href="#cb39-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb39-23"><a href="#cb39-23" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>()</span>
+<span id="cb39-24"><a href="#cb39-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb39-25"><a href="#cb39-25" aria-hidden="true" tabindex="-1"></a><span class="co"># Overall assessment</span></span>
+<span id="cb39-26"><a href="#cb39-26" aria-hidden="true" tabindex="-1"></a>n_covered <span class="op">=</span> <span class="bu">sum</span>(<span class="dv">1</span> <span class="cf">for</span> w <span class="kw">in</span> within_2se <span class="cf">if</span> w <span class="kw">is</span> <span class="va">True</span>)</span>
+<span id="cb39-27"><a href="#cb39-27" aria-hidden="true" tabindex="-1"></a>n_total <span class="op">=</span> <span class="bu">sum</span>(<span class="dv">1</span> <span class="cf">for</span> w <span class="kw">in</span> within_2se <span class="cf">if</span> w <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>)</span>
+<span id="cb39-28"><a href="#cb39-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb39-29"><a href="#cb39-29" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> n_total <span class="op">&gt;</span> <span class="dv">0</span>:</span>
+<span id="cb39-30"><a href="#cb39-30" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"Coverage: </span><span class="sc">{</span>n_covered<span class="sc">}</span><span class="ss">/</span><span class="sc">{</span>n_total<span class="sc">}</span><span class="ss"> parameters within 2 SE of true value"</span>)</span>
+<span id="cb39-31"><a href="#cb39-31" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> n_covered <span class="op">==</span> n_total:</span>
+<span id="cb39-32"><a href="#cb39-32" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="st">"✓ All parameters recovered successfully!"</span>)</span>
+<span id="cb39-33"><a href="#cb39-33" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
+<span id="cb39-34"><a href="#cb39-34" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="st">"⚠ Some parameters may have estimation issues."</span>)</span>
+<span id="cb39-35"><a href="#cb39-35" aria-hidden="true" tabindex="-1"></a><span class="cf">else</span>:</span>
+<span id="cb39-36"><a href="#cb39-36" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"⚠ Standard errors not available for coverage assessment."</span>)</span>
+<span id="cb39-37"><a href="#cb39-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb39-38"><a href="#cb39-38" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>()</span>
+<span id="cb39-39"><a href="#cb39-39" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"="</span> <span class="op">*</span> <span class="dv">60</span>)</span>
+<span id="cb39-40"><a href="#cb39-40" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"COVARIANCE MATRIX"</span>)</span>
+<span id="cb39-41"><a href="#cb39-41" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"="</span> <span class="op">*</span> <span class="dv">60</span>)</span>
+<span id="cb39-42"><a href="#cb39-42" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(result.cov_matrix)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>============================================================
+DIAGNOSTICS
+============================================================
+  β: |1.5000 - 1.0000| = 0.5000 &gt; 2×SE=0.0155 → ✗ No
+  γ: |0.1625 - 0.1000| = 0.0625 &gt; 2×SE=nan → SE not available
+  δ: |0.9225 - 0.9500| = 0.0275 &gt; 2×SE=0.0041 → ✗ No
+
+Coverage: 0/2 parameters within 2 SE of true value
+⚠ Some parameters may have estimation issues.
+
+============================================================
+COVARIANCE MATRIX
+============================================================
+[[ 5.99318898e-05 -2.00022473e-05 -1.47448788e-05]
+ [-2.00022473e-05 -3.31677621e-07  2.40990038e-06]
+ [-1.47448788e-05  2.40990038e-06  4.24376674e-06]]</code></pre>
+</div>
+</div>
 </section>
 </section>
 
