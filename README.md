@@ -1,202 +1,240 @@
-# MDP Solver with Neural Network Value Iteration
+# MDP Practice: Dynamic Discrete Choice Models
 
-A Python implementation for solving **Dynamic Discrete Choice (DDC) Models** with Type-I Extreme Value shocks using monotonic neural networks.
+A complete Python implementation for **solving**, **simulating**, and **estimating** Dynamic Discrete Choice (DDC) Models using neural network value iteration.
 
 ## Project Overview
 
-This project implements a neural network-based approach to solve Markov Decision Processes (MDPs) where agents make binary choices under uncertainty. The model captures:
+This project implements a full structural estimation pipeline for Markov Decision Processes (MDPs):
 
-- **State-dependent utility**: $u(s, a) = \beta \log(1 + s) - a$
-- **Deterministic transitions**: $s' = (1 - \gamma)s + a$
+```
+┌─────────────────┐     ┌──────────────────┐     ┌──────────────────┐
+│   MDP Solver    │────▶│   MDP Simulator  │────▶│   MDP Estimator  │
+│  (Neural Net    │     │  (Monte Carlo    │     │  (Structural     │
+│   Value Iter.)  │     │   Panel Data)    │     │   MLE/NFXP)      │
+└─────────────────┘     └──────────────────┘     └──────────────────┘
+```
+
+### The Model
+
+Agents make binary choices (invest or not) to maximize lifetime utility:
+
+- **State transition** (deterministic): $s_{t+1} = (1 - \gamma)s_t + a_t$
+- **Flow utility**: $u(s, a) = \beta \log(1 + s) - a$
 - **Type-I Extreme Value shocks**: Leading to logit choice probabilities
 - **Infinite horizon**: With discount factor $\delta$
 
-## Features
+### Key Features
 
-- **Monotonic Neural Networks**: Enforces economically sensible behavior (value increasing in state)
-- **Target Networks**: Stabilizes training by providing fixed Bellman targets
-- **Fixed State Grid**: Eliminates sampling variance for consistent optimization
-- **Bellman Residual Minimization**: Trains networks to satisfy the fixed-point equation
+| Component | Method | Key Innovation |
+|-----------|--------|----------------|
+| **Solver** | Neural Network Value Iteration | Monotonic networks for economic consistency |
+| **Simulator** | Monte Carlo Panel Data | Logit choice probabilities from solved values |
+| **Estimator** | Two-Step NFXP | OLS for γ, calibrated δ, MLE for β |
 
-## Installation
+---
+
+## Quick Start
+
+### Installation
 
 ```bash
-# Clone the repository
-git clone <repository-url>
+# Clone and install
+git clone https://github.com/Hude-Hude/MDP_Practice.git
 cd MDP_Practice
-
-# Install dependencies with uv
 uv sync
 ```
 
-## Usage
-
-### Quick Start
-
-```python
-from mdp_solver import solve_value_function, compute_choice_probability
-
-# Solve the MDP
-v0_net, v1_net, losses, n_iter = solve_value_function(
-    beta=0.5,           # Utility coefficient
-    gamma=0.1,          # Depreciation rate
-    delta=0.95,         # Discount factor
-    s_min=0.0,
-    s_max=20.0,
-    hidden_sizes=[16],  # Single hidden layer
-    learning_rate=0.1,
-    batch_size=256,
-    tolerance=0.01,
-    max_iterations=5000,
-    target_update_freq=10,
-)
-
-# Compute choice probabilities
-p0, p1 = compute_choice_probability(v0_net, v1_net, states)
-```
-
-### Running the Quarto Report
+### Run the Full Pipeline
 
 ```bash
-cd scripts/solve_mdp
-quarto preview solve_mdp.qmd
+# 1. Solve the MDP (trains neural network value functions)
+cd scripts/solve_mdp && quarto render solve_mdp.qmd
+
+# 2. Simulate panel data (Monte Carlo simulation)
+cd ../simulate_mdp && quarto render simulate_mdp.qmd
+
+# 3. Estimate structural parameters (recover true values)
+cd ../estimate_mdp && quarto render estimate_mdp.qmd
 ```
+
+### Interactive Development
+
+```bash
+# Start live preview servers
+quarto preview scripts/solve_mdp/solve_mdp.qmd --port 7629 &
+quarto preview scripts/simulate_mdp/simulate_mdp.qmd --port 7630 &
+quarto preview scripts/estimate_mdp/estimate_mdp.qmd --port 7628 &
+```
+
+---
 
 ## Project Structure
 
 ```
 MDP_Practice/
-├── src/mdp_solver/          # Main implementation
-│   ├── mdp_solver.py        # Neural network solver
-│   └── __init__.py          # Package exports
-├── test/mdp_solver/         # Unit tests
-│   ├── test_network.py      # Network component tests
-│   ├── test_solver.py       # Solver tests
-│   ├── test_model.py        # Model primitive tests
-│   └── test_value_function.py
-├── scripts/solve_mdp/       # Quarto report
-│   └── solve_mdp.qmd        # Interactive analysis
-└── README.md
+├── src/
+│   ├── mdp_solver/           # Neural network value iteration
+│   │   └── mdp_solver.py     # solve_value_function(), compute_choice_probability()
+│   ├── mdp_simulator/        # Monte Carlo simulation
+│   │   └── mdp_simulator.py  # simulate_mdp_panel(), PanelData
+│   └── mdp_estimator/        # Structural estimation
+│       └── mdp_estimator.py  # estimate_two_step(), compute_log_likelihood()
+├── scripts/
+│   ├── config_mdp/           # Centralized parameters
+│   │   └── config.py         # β, γ, δ, network architecture
+│   ├── mdp_utils/            # Shared plotting utilities
+│   │   └── plotting.py       # Consistent visualization
+│   ├── solve_mdp/            # Solver report
+│   │   └── solve_mdp.qmd
+│   ├── simulate_mdp/         # Simulation report
+│   │   └── simulate_mdp.qmd
+│   └── estimate_mdp/         # Estimation report
+│       └── estimate_mdp.qmd
+├── output/
+│   ├── solve_mdp/            # Trained networks, losses
+│   └── simulate_mdp/         # Panel data (states, actions, rewards)
+└── test/                     # Unit and integration tests
 ```
+
+---
+
+## Pipeline Details
+
+### 1. MDP Solver (`src/mdp_solver`)
+
+Solves the Bellman equation using neural network approximation:
+
+```python
+from mdp_solver import solve_value_function, compute_choice_probability
+
+v0_net, v1_net, losses, n_iter = solve_value_function(
+    beta=1.0, gamma=0.1, delta=0.95,
+    s_min=0.0, s_max=10.0,
+    hidden_sizes=[64, 64],
+)
+```
+
+**Key innovations:**
+- Monotonic neural networks (non-negative weights via softplus)
+- Target networks for training stability
+- Fixed state grid for consistent optimization
+
+### 2. MDP Simulator (`src/mdp_simulator`)
+
+Generates synthetic panel data using solved value functions:
+
+```python
+from mdp_simulator import simulate_mdp_panel
+
+panel = simulate_mdp_panel(
+    v0_net, v1_net,
+    beta=1.0, gamma=0.1, delta=0.95,
+    n_agents=100, n_periods=100,
+    s_init=np.random.uniform(0, 10, 100),
+)
+# panel.states: (100, 100), panel.actions: (100, 100), panel.rewards: (100, 100)
+```
+
+### 3. MDP Estimator (`src/mdp_estimator`)
+
+Recovers structural parameters from simulated data:
+
+```python
+from mdp_estimator import estimate_two_step
+
+result = estimate_two_step(
+    data=panel,
+    delta_calibrated=0.95,  # Calibrated
+    solver_params=solver_params,
+    beta_bounds=(0.5, 1.5),
+    n_points=20,
+)
+# result.gamma_hat: 0.1 (exact from OLS)
+# result.beta_hat: ~1.03 (within 2 SE of true)
+```
+
+**Two-step approach addresses weak identification:**
+1. **Step 1**: Estimate γ directly from transitions (OLS, exact recovery)
+2. **Step 2**: Estimate β via 1D grid search (δ calibrated)
+
+---
+
+## Key Results
+
+### Parameter Recovery
+
+| Parameter | True | Estimated | Method |
+|-----------|------|-----------|--------|
+| β (reward) | 1.0 | ~1.03 | MLE (1D grid) |
+| γ (decay) | 0.1 | 0.1 (exact) | OLS |
+| δ (discount) | 0.95 | 0.95 | Calibrated |
+
+### Estimation Challenge Solved
+
+**Problem**: Joint 3-parameter estimation suffered from weak identification (flat likelihood surface).
+
+**Solution**: Two-step estimation exploiting model structure:
+- γ identified from deterministic transitions alone
+- δ typically calibrated in structural estimation
+- β well-identified when γ and δ are fixed
+
+---
 
 ## Running Tests
 
 ```bash
+# All tests
 uv run pytest test/ -v
+
+# Fast unit tests only
+uv run pytest test/ -v -m "not slow"
+
+# Slow integration tests
+uv run pytest test/ -v -m slow
 ```
-
-## Model Details
-
-### Bellman Equation
-
-The choice-specific value function satisfies:
-$$v(s, a) = \beta \log(1 + s) - a + \delta \bar{V}((1-\gamma)s + a)$$
-
-where $\bar{V}(s) = \log(\exp(v(s,0)) + \exp(v(s,1)))$ is the integrated value function.
-
-### Choice Probabilities
-
-With Type-I Extreme Value shocks, optimal choice probabilities follow the logit formula:
-$$P(a=1|s) = \frac{\exp(v(s,1))}{\exp(v(s,0)) + \exp(v(s,1))}$$
-
-### Neural Network Architecture
-
-- **Monotonic constraint**: Non-negative weights via softplus parameterization
-- **Activation**: Tanh (bounded, zero-centered)
-- **Architecture**: Single hidden layer with 16 units
 
 ---
 
-## Development Findings & Technical Notes
+## Configuration
 
-### Key Issues Discovered and Resolved
+All model parameters are centralized in `scripts/config_mdp/config.py`:
 
-#### 1. Discount Factor Parameter Confusion
+```python
+# Model parameters
+beta = 1.0      # Reward coefficient
+gamma = 0.1     # State decay rate
+delta = 0.95    # Discount factor
+s_min = 0.0     # State lower bound
+s_max = 10.0    # State upper bound
 
-**Problem**: The Bellman target computation used `delta * V(s')` but `delta` was incorrectly set to 10.0 (investment cost) instead of 0.95 (discount factor).
+# Network architecture
+hidden_sizes = [64, 64]
+learning_rate = 0.01
+batch_size = 512
+tolerance = 0.001
+max_iterations = 10000
+target_update_freq = 100
+```
 
-**Symptom**: Loss exploded exponentially during training.
+---
 
-**Solution**: Corrected parameter usage - `delta` is the discount factor (0.95), `beta` is the utility coefficient.
+## Technical Notes
 
-#### 2. Activation Function Choice
+### Solver Implementation
 
-**Problem**: Original implementation used Softplus activation, which is unbounded (0, ∞).
+- **Monotonic constraint**: Non-negative weights via softplus parameterization
+- **Activation**: Tanh (bounded, zero-centered)
+- **Target networks**: Updated every `target_update_freq` iterations
+- **Convergence**: ~3000 iterations, RMSE < 0.001
 
-**Symptom**: Value functions collapsed to constant outputs regardless of state.
+### Estimation Implementation
 
-**Analysis**:
-- Softplus outputs are always positive
-- With positive weights (monotonicity constraint), signals compound and grow
-- Network saturates to near-constant values
+- **NFXP structure**: Outer loop (parameter search) + Inner loop (DP solution)
+- **Warm-starting**: Pre-trained networks speed up inner loop convergence
+- **Standard errors**: Numerical Hessian at the optimum
 
-**Solution**: Switched to Tanh activation:
-- Bounded to [-1, 1]
-- Zero-centered
-- Better gradient flow through layers
+---
 
-#### 3. Network Architecture Depth
+## License
 
-**Problem**: Deep networks [64, 64] failed to learn state-dependent value functions.
-
-**Symptom**: Flat value functions, constant choice probabilities (~0.27).
-
-**Analysis**:
-- Too many parameters (4,225) for a simple 1D monotonic function
-- Signal dilution through multiple layers
-- Tanh saturation causing vanishing gradients
-
-**Solution**: Use shallow networks [16] (single hidden layer):
-- Converges in ~600 iterations (vs 5000+ for deep)
-- RMSE ~0.01 (vs 0.36 for deep)
-- Correct state-dependent behavior
-
-#### 4. Moving Target Problem
-
-**Problem**: Computing Bellman targets from the same networks being updated creates instability.
-
-**Solution**: Implemented target networks (frozen copies updated periodically):
-- Policy networks: Updated every iteration
-- Target networks: Updated every `target_update_freq` iterations
-- Provides stable regression targets
-
-#### 5. Sampling Variance
-
-**Problem**: Random state sampling each iteration introduces noise in the loss signal.
-
-**Solution**: Fixed state grid using `torch.linspace`:
-- Same states evaluated every iteration
-- Consistent loss signal
-- Faster, more stable convergence
-
-### Results Summary
-
-With correct implementation:
-
-| Parameter | Value |
-|-----------|-------|
-| β (utility) | 0.5 |
-| γ (decay) | 0.1 |
-| δ (discount) | 0.95 |
-| Architecture | [16] |
-
-| Metric | Result |
-|--------|--------|
-| Convergence | ~600 iterations |
-| Final RMSE | ~0.01 |
-| P(a=1) at s=0 | ~0.58 (invest) |
-| P(a=1) at s=20 | ~0.32 (don't invest) |
-
-**Economic Interpretation**: The model correctly learns an (S,s)-type inventory policy where investment is attractive at low states (high marginal utility) and unattractive at high states (diminishing returns).
-
-### Known Limitations
-
-1. **Boundary smoothness**: Value functions show slight irregularities at low state boundaries
-2. **Extrapolation**: Network behavior beyond training range [s_min, s_max] not guaranteed
-
-### Future Improvements
-
-- Investigate boundary smoothness issues
-- Add gradient clipping for additional stability
-- Explore alternative monotonic architectures
-- Add support for continuous action spaces
+MIT License
