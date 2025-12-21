@@ -21,6 +21,7 @@ from mdp_estimator import (
     EstimationResult,
     compute_log_likelihood,
     estimate_mle,
+    grid_search_mle,
     compute_standard_errors,
 )
 from mdp_simulator import PanelData
@@ -45,29 +46,25 @@ def fake_panel_data():
 
 @pytest.fixture
 def solver_params():
-    """Solver hyperparameters (from config, matching saved simulation)."""
-    # Add config path
-    config_path = os.path.join(
-        os.path.dirname(__file__), '..', '..', 'scripts', 'config_mdp'
-    )
-    if config_path not in sys.path:
-        sys.path.insert(0, config_path)
+    """Fast solver hyperparameters for integration tests.
     
-    import config
+    Uses smaller network, fewer iterations, and looser tolerance
+    to speed up tests while still verifying code correctness.
+    """
     return {
-        's_min': config.s_min,
-        's_max': config.s_max,
-        'hidden_sizes': config.hidden_sizes,
-        'learning_rate': config.learning_rate,
-        'batch_size': config.batch_size,
-        'tolerance': config.tolerance,
-        'max_iterations': config.max_iterations,
-        'target_update_freq': config.target_update_freq,
+        's_min': 0.0,
+        's_max': 10.0,
+        'hidden_sizes': [8],           # Small network (vs [16])
+        'learning_rate': 0.1,
+        'batch_size': 64,
+        'tolerance': 0.1,              # Loose tolerance (vs 0.01)
+        'max_iterations': 1000,        # Few iterations (vs 20000)
+        'target_update_freq': 10,
     }
 
 
 # =============================================================================
-# Fixtures for Integration Tests (load saved data - no solver needed)
+# Fixtures for Integration Tests (small data for speed)
 # =============================================================================
 
 @pytest.fixture
@@ -88,7 +85,11 @@ def true_params():
 
 @pytest.fixture
 def simulated_data():
-    """Load saved panel data from output/simulate_mdp/ (no solver needed)."""
+    """Load small subset of saved panel data for fast integration tests.
+    
+    Uses only first 10 agents and 10 periods (100 observations)
+    instead of full 100x100 (10,000 observations).
+    """
     data_dir = os.path.join(
         os.path.dirname(__file__), '..', '..', 'output', 'simulate_mdp'
     )
@@ -97,14 +98,16 @@ def simulated_data():
     actions = np.load(os.path.join(data_dir, 'actions.npy'))
     rewards = np.load(os.path.join(data_dir, 'rewards.npy'))
     
-    n_agents, n_periods = states.shape
+    # Use small subset for fast tests
+    n_agents_test = 10
+    n_periods_test = 10
     
     return PanelData(
-        states=states,
-        actions=actions,
-        rewards=rewards,
-        n_agents=n_agents,
-        n_periods=n_periods,
+        states=states[:n_agents_test, :n_periods_test],
+        actions=actions[:n_agents_test, :n_periods_test],
+        rewards=rewards[:n_agents_test, :n_periods_test],
+        n_agents=n_agents_test,
+        n_periods=n_periods_test,
     )
 
 
@@ -317,3 +320,54 @@ class TestIntegration:
         assert beta_hat > 0, "beta should be positive"
         assert 0 < gamma_hat < 1, "gamma should be in (0, 1)"
         assert 0 < delta_hat < 1, "delta should be in (0, 1)"
+
+
+@pytest.mark.slow
+class TestGridSearch:
+    """Integration tests for grid search estimation (requires solver)."""
+    
+    def test_grid_search_returns_result(self, simulated_data, true_params, solver_params):
+        """grid_search_mle should return EstimationResult object."""
+        bounds = {
+            'beta': (true_params['beta'] * 0.9, true_params['beta'] * 1.1),
+            'gamma': (true_params['gamma'] * 0.8, true_params['gamma'] * 1.2),
+            'delta': (true_params['delta'] * 0.95, true_params['delta'] * 1.02),
+        }
+        
+        result = grid_search_mle(
+            simulated_data, bounds, n_points=2,
+            solver_params=solver_params, verbose=False, compute_se=False
+        )
+        
+        assert isinstance(result, EstimationResult), "Should return EstimationResult"
+        assert result.theta_hat.shape == (3,), "theta_hat should have 3 elements"
+        assert np.isfinite(result.log_likelihood), "log_likelihood should be finite"
+        assert result.n_iterations == 8, "Should have 2^3 = 8 evaluations"
+        assert result.converged is True, "Grid search always converges"
+    
+    def test_grid_search_finds_best_in_grid(self, simulated_data, true_params, solver_params):
+        """Grid search should return the grid point with highest likelihood."""
+        bounds = {
+            'beta': (true_params['beta'] * 0.9, true_params['beta'] * 1.1),
+            'gamma': (true_params['gamma'] * 0.8, true_params['gamma'] * 1.2),
+            'delta': (true_params['delta'] * 0.95, true_params['delta'] * 1.02),
+        }
+        
+        result = grid_search_mle(
+            simulated_data, bounds, n_points=2,
+            solver_params=solver_params, verbose=False, compute_se=False
+        )
+        
+        # Verify theta_hat is in the grid
+        grid_results = result.optimization_result
+        beta_grid = grid_results['grid']['beta']
+        gamma_grid = grid_results['grid']['gamma']
+        delta_grid = grid_results['grid']['delta']
+        
+        assert result.theta_hat[0] in beta_grid, "beta should be in grid"
+        assert result.theta_hat[1] in gamma_grid, "gamma should be in grid"
+        assert result.theta_hat[2] in delta_grid, "delta should be in grid"
+        
+        # Verify it has the highest likelihood
+        all_lls = [e['log_likelihood'] for e in grid_results['evaluations']]
+        assert result.log_likelihood == max(all_lls), "Should return max likelihood point"

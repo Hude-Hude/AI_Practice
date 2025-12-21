@@ -2,7 +2,8 @@
 
 This module implements:
 - compute_log_likelihood: Compute log-likelihood for candidate parameters
-- estimate_mle: Main estimation routine using Nelder-Mead
+- estimate_mle: Estimation using Nelder-Mead optimization
+- grid_search_mle: Estimation using explicit grid search
 - compute_standard_errors: Numerical Hessian-based standard errors
 """
 
@@ -217,6 +218,116 @@ def estimate_mle(
         n_iterations=result.nit,
         converged=result.success,
         optimization_result=result,
+    )
+
+
+def grid_search_mle(
+    data: PanelData,
+    bounds: Dict[str, Tuple[float, float]],
+    n_points: int,
+    solver_params: Dict[str, Any],
+    verbose: bool = True,
+    compute_se: bool = True,
+) -> EstimationResult:
+    """Estimate structural parameters via grid search.
+    
+    Evaluates log-likelihood on a grid of parameter values and
+    returns the grid point with highest likelihood.
+    
+    Parameters
+    ----------
+    data : PanelData
+        Panel data with states and actions arrays
+    bounds : dict
+        Parameter bounds: {'beta': (min, max), 'gamma': (min, max), 'delta': (min, max)}
+    n_points : int
+        Number of grid points per dimension (total evaluations = n_points^3)
+    solver_params : dict
+        Solver hyperparameters (see compute_log_likelihood)
+    verbose : bool
+        Print progress during search (default True)
+    compute_se : bool
+        Whether to compute standard errors at best point (default True)
+    
+    Returns
+    -------
+    EstimationResult
+        Estimation results including estimates and optionally standard errors
+    """
+    # Create grid for each parameter
+    beta_grid = np.linspace(bounds['beta'][0], bounds['beta'][1], n_points)
+    gamma_grid = np.linspace(bounds['gamma'][0], bounds['gamma'][1], n_points)
+    delta_grid = np.linspace(bounds['delta'][0], bounds['delta'][1], n_points)
+    
+    # Total evaluations
+    total_evals = n_points ** 3
+    
+    if verbose:
+        print(f"Grid search: {n_points} points per dimension = {total_evals} total evaluations")
+        print(f"  beta  in [{bounds['beta'][0]:.3f}, {bounds['beta'][1]:.3f}]")
+        print(f"  gamma in [{bounds['gamma'][0]:.3f}, {bounds['gamma'][1]:.3f}]")
+        print(f"  delta in [{bounds['delta'][0]:.3f}, {bounds['delta'][1]:.3f}]")
+    
+    # Store all results
+    results = []
+    best_ll = -np.inf
+    best_theta = None
+    eval_count = 0
+    
+    # Iterate over grid
+    for beta in beta_grid:
+        for gamma in gamma_grid:
+            for delta in delta_grid:
+                eval_count += 1
+                theta = np.array([beta, gamma, delta])
+                
+                # Compute log-likelihood
+                ll = compute_log_likelihood(theta, data, solver_params)
+                results.append({'theta': theta, 'log_likelihood': ll})
+                
+                # Track best
+                if ll > best_ll:
+                    best_ll = ll
+                    best_theta = theta.copy()
+                
+                if verbose and eval_count % 10 == 0:
+                    print(f"  Eval {eval_count}/{total_evals}: best LL = {best_ll:.2f}")
+    
+    if verbose:
+        print(f"\nGrid search complete.")
+        print(f"  Best theta: beta={best_theta[0]:.4f}, gamma={best_theta[1]:.4f}, delta={best_theta[2]:.4f}")
+        print(f"  Best LL: {best_ll:.2f}")
+    
+    # Compute standard errors at best point (optional)
+    if compute_se:
+        if verbose:
+            print("Computing standard errors...")
+        std_errors, cov_matrix = compute_standard_errors(
+            best_theta, data, solver_params
+        )
+    else:
+        std_errors = np.full(3, np.nan)
+        cov_matrix = np.full((3, 3), np.nan)
+    
+    # Create result object
+    # Store grid results in optimization_result for inspection
+    grid_results = {
+        'grid': {
+            'beta': beta_grid,
+            'gamma': gamma_grid,
+            'delta': delta_grid,
+        },
+        'evaluations': results,
+    }
+    
+    return EstimationResult(
+        theta_hat=best_theta,
+        std_errors=std_errors,
+        cov_matrix=cov_matrix,
+        log_likelihood=best_ll,
+        n_iterations=total_evals,
+        converged=True,  # Grid search always "converges"
+        optimization_result=grid_results,
     )
 
 
