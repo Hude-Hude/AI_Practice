@@ -110,7 +110,7 @@ from mdp_solver import solve_value_function, compute_choice_probability
 v0_net, v1_net, losses, n_iter = solve_value_function(
     beta=1.0, gamma=0.1, delta=0.95,
     s_min=0.0, s_max=10.0,
-    hidden_sizes=[64, 64],
+    hidden_sizes=[16],
 )
 ```
 
@@ -208,12 +208,12 @@ s_min = 0.0     # State lower bound
 s_max = 10.0    # State upper bound
 
 # Network architecture
-hidden_sizes = [64, 64]
-learning_rate = 0.01
-batch_size = 512
-tolerance = 0.001
-max_iterations = 10000
-target_update_freq = 100
+hidden_sizes = [16]        # Single hidden layer
+learning_rate = 0.1        # Higher LR works well with target networks
+batch_size = 256
+tolerance = 0.01           # Convergence tolerance (RMSE)
+max_iterations = 20000
+target_update_freq = 10    # Target network update frequency
 ```
 
 ---
