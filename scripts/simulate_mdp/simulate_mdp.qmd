@@ -22,6 +22,7 @@ import torch
 # Add project paths
 sys.path.insert(0, "../../src")
 sys.path.insert(0, "../config_mdp")
+sys.path.insert(0, "../mdp_utils")
 
 # Import MDP solver
 from mdp_solver import (
@@ -33,6 +34,15 @@ from mdp_solver import (
 
 # Import configuration
 import config
+
+# Import plotting utilities
+from plotting import (
+    plot_convergence,
+    plot_value_functions,
+    plot_choice_probabilities,
+    plot_value_difference,
+    plot_bellman_residuals,
+)
 
 print("Modules loaded successfully")
 ```
