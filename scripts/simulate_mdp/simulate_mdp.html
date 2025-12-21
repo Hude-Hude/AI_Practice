@@ -71,6 +71,35 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="simulate_mdp_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
 <link href="simulate_mdp_files/libs/bootstrap/bootstrap-d6a003b94517c951b2d65075d42fb01b.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
 
 </head>
 
@@ -84,6 +113,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   <ul>
   <li><a href="#setup" id="toc-setup" class="nav-link active" data-scroll-target="#setup">Setup</a></li>
   <li><a href="#load-configuration-and-trained-model" id="toc-load-configuration-and-trained-model" class="nav-link" data-scroll-target="#load-configuration-and-trained-model">Load Configuration and Trained Model</a></li>
+  <li><a href="#simulation-algorithm" id="toc-simulation-algorithm" class="nav-link" data-scroll-target="#simulation-algorithm">Simulation Algorithm</a>
+  <ul class="collapse">
+  <li><a href="#overview" id="toc-overview" class="nav-link" data-scroll-target="#overview">Overview</a></li>
+  <li><a href="#type-definitions" id="toc-type-definitions" class="nav-link" data-scroll-target="#type-definitions">Type Definitions</a></li>
+  <li><a href="#main-algorithm" id="toc-main-algorithm" class="nav-link" data-scroll-target="#main-algorithm">Main Algorithm</a></li>
+  <li><a href="#subroutines" id="toc-subroutines" class="nav-link" data-scroll-target="#subroutines">Subroutines</a></li>
+  <li><a href="#properties" id="toc-properties" class="nav-link" data-scroll-target="#properties">Properties</a></li>
+  </ul></li>
   </ul>
 </nav>
 </div>
@@ -200,6 +237,140 @@ Loaded trained networks from /Users/kissshot894/Documents/HKUST/RA/MDP_Practice/
   Final RMSE: 9.94e-03</code></pre>
 </div>
 </div>
+</section>
+<section id="simulation-algorithm" class="level2">
+<h2 class="anchored" data-anchor-id="simulation-algorithm">Simulation Algorithm</h2>
+<section id="overview" class="level3">
+<h3 class="anchored" data-anchor-id="overview">Overview</h3>
+<p>The Monte Carlo simulator generates panel data by forward-simulating agents who follow the optimal policy derived from the trained value functions. Each period:</p>
+<ol type="1">
+<li>Agent observes current state <span class="math inline">\(s_t\)</span></li>
+<li>Agent draws action from the closed-form logit choice probability: <span class="math display">\[a_t \sim \text{Bernoulli}\left( P(a=1|s_t) \right) \quad \text{where} \quad P(a=1|s) = \frac{\exp(v(s,1))}{\exp(v(s,0)) + \exp(v(s,1))}\]</span></li>
+<li>State transitions: <span class="math inline">\(s_{t+1} = (1 - \gamma) s_t + a_t\)</span></li>
+</ol>
+<p>Since Type-I Extreme Value shocks yield closed-form logit probabilities, we use the analytical choice probabilities directly rather than drawing shocks.</p>
+</section>
+<section id="type-definitions" class="level3">
+<h3 class="anchored" data-anchor-id="type-definitions">Type Definitions</h3>
+<pre><code>TYPE DEFINITIONS
+────────────────
+Scalar      = Float                      # Single real number
+Vector[n]   = Array[Float, n]            # 1D array of n floats
+Matrix[m,n] = Array[Float, m, n]         # 2D array of shape (m, n)
+Action      = Int ∈ {0, 1}               # Binary action
+Network     = MonotonicNeuralNetwork     # Trained value function network</code></pre>
+</section>
+<section id="main-algorithm" class="level3">
+<h3 class="anchored" data-anchor-id="main-algorithm">Main Algorithm</h3>
+<pre><code>ALGORITHM: SIMULATE_MDP_PANEL
+─────────────────────────────
+INPUT:
+  v₀_net       : Network       # Trained network for action 0
+  v₁_net       : Network       # Trained network for action 1
+  n_agents     : Int           # Number of agents
+  n_periods    : Int           # Number of time periods
+  s_init       : Vector[n] | Scalar  # Initial states
+  β            : Scalar        # Reward coefficient
+  γ            : Scalar        # State decay rate
+  seed         : Int           # Random seed for reproducibility
+
+OUTPUT:
+  states       : Matrix[n, T]  # State history for each agent
+  actions      : Matrix[n, T]  # Action history for each agent
+  rewards      : Matrix[n, T]  # Reward history for each agent
+
+PROCEDURE:
+  SET_SEED(seed)
+  
+  # Initialize storage matrices
+  states  ← Matrix[n_agents, n_periods]
+  actions ← Matrix[n_agents, n_periods]
+  rewards ← Matrix[n_agents, n_periods]
+  
+  # Set initial states
+  states[*, 0] ← s_init
+  
+  FOR t = 0 TO n_periods - 1:
+    # Get current states for all agents
+    s_t ← states[*, t]
+    
+    # Compute choice probabilities using closed-form logit formula
+    _, p₁ ← COMPUTE_CHOICE_PROBABILITY(v₀_net, v₁_net, s_t)
+    
+    # Draw actions from Bernoulli distribution
+    u ← UNIFORM(0, 1, n_agents)
+    actions[*, t] ← (u &lt; p₁) ? 1 : 0
+    
+    # Compute flow rewards
+    rewards[*, t] ← COMPUTE_REWARD(s_t, actions[*, t], β)
+    
+    # State transition (if not last period)
+    IF t &lt; n_periods - 1:
+      states[*, t+1] ← COMPUTE_NEXT_STATE(s_t, actions[*, t], γ)
+  
+  RETURN (states, actions, rewards)</code></pre>
+</section>
+<section id="subroutines" class="level3">
+<h3 class="anchored" data-anchor-id="subroutines">Subroutines</h3>
+<pre><code>SUBROUTINE: COMPUTE_CHOICE_PROBABILITY
+──────────────────────────────────────
+INPUT:
+  v₀_net : Network           # Trained network for action 0
+  v₁_net : Network           # Trained network for action 1
+  s      : Vector[n]         # States
+OUTPUT:
+  p₀     : Vector[n]         # P(a=0|s)
+  p₁     : Vector[n]         # P(a=1|s)
+
+  # Evaluate value functions
+  v₀ ← EVALUATE_NETWORK(v₀_net, s)
+  v₁ ← EVALUATE_NETWORK(v₁_net, s)
+  
+  # Closed-form logit probabilities (from Type-I EV distribution)
+  # Using numerically stable softmax
+  v_max ← MAX(v₀, v₁)
+  exp₀ ← exp(v₀ - v_max)
+  exp₁ ← exp(v₁ - v_max)
+  sum_exp ← exp₀ + exp₁
+  
+  p₀ ← exp₀ / sum_exp
+  p₁ ← exp₁ / sum_exp
+  
+  RETURN (p₀, p₁)</code></pre>
+<pre><code>SUBROUTINE: COMPUTE_REWARD
+──────────────────────────
+INPUT:
+  s      : Vector[n]         # States
+  a      : Vector[n]         # Actions (0 or 1)
+  β      : Scalar            # Reward coefficient
+OUTPUT:
+  r      : Vector[n]         # Flow rewards
+
+  FOR i = 0 TO n - 1:
+    r[i] ← β * log(1 + s[i]) - a[i]
+  RETURN r</code></pre>
+<pre><code>SUBROUTINE: COMPUTE_NEXT_STATE
+──────────────────────────────
+INPUT:
+  s      : Vector[n]         # Current states
+  a      : Vector[n]         # Actions (0 or 1)
+  γ      : Scalar            # Decay rate
+OUTPUT:
+  s'     : Vector[n]         # Next states
+
+  FOR i = 0 TO n - 1:
+    s'[i] ← (1 - γ) * s[i] + a[i]
+  RETURN s'</code></pre>
+</section>
+<section id="properties" class="level3">
+<h3 class="anchored" data-anchor-id="properties">Properties</h3>
+<p>The simulation algorithm satisfies the following properties:</p>
+<ol type="1">
+<li><p><strong>Exactness</strong>: Actions are drawn directly from the closed-form logit probabilities: <span class="math display">\[P(a=1|s) = \frac{\exp(v(s,1))}{\exp(v(s,0)) + \exp(v(s,1))}\]</span> This uses the analytical result from Type-I Extreme Value shocks rather than simulating the shocks.</p></li>
+<li><p><strong>Ergodicity</strong>: Under the optimal policy, the state process converges to a stationary distribution (given <span class="math inline">\(0 &lt; \gamma &lt; 1\)</span>).</p></li>
+<li><p><strong>Reproducibility</strong>: Given the same seed, the algorithm produces identical panel data.</p></li>
+</ol>
+</section>
 </section>
 
 </main>

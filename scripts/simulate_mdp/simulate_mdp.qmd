@@ -88,3 +88,151 @@ print(f"  Training iterations: {len(losses)}")
 print(f"  Final RMSE: {losses[-1]**0.5:.2e}")
 ```
 
+## Simulation Algorithm
+
+### Overview
+
+The Monte Carlo simulator generates panel data by forward-simulating agents who follow the optimal policy derived from the trained value functions. Each period:
+
+1. Agent observes current state $s_t$
+2. Agent draws action from the closed-form logit choice probability:
+   $$a_t \sim \text{Bernoulli}\left( P(a=1|s_t) \right) \quad \text{where} \quad P(a=1|s) = \frac{\exp(v(s,1))}{\exp(v(s,0)) + \exp(v(s,1))}$$
+3. State transitions: $s_{t+1} = (1 - \gamma) s_t + a_t$
+
+Since Type-I Extreme Value shocks yield closed-form logit probabilities, we use the analytical choice probabilities directly rather than drawing shocks.
+
+### Type Definitions
+
+```
+TYPE DEFINITIONS
+────────────────
+Scalar      = Float                      # Single real number
+Vector[n]   = Array[Float, n]            # 1D array of n floats
+Matrix[m,n] = Array[Float, m, n]         # 2D array of shape (m, n)
+Action      = Int ∈ {0, 1}               # Binary action
+Network     = MonotonicNeuralNetwork     # Trained value function network
+```
+
+### Main Algorithm
+
+```
+ALGORITHM: SIMULATE_MDP_PANEL
+─────────────────────────────
+INPUT:
+  v₀_net       : Network       # Trained network for action 0
+  v₁_net       : Network       # Trained network for action 1
+  n_agents     : Int           # Number of agents
+  n_periods    : Int           # Number of time periods
+  s_init       : Vector[n] | Scalar  # Initial states
+  β            : Scalar        # Reward coefficient
+  γ            : Scalar        # State decay rate
+  seed         : Int           # Random seed for reproducibility
+
+OUTPUT:
+  states       : Matrix[n, T]  # State history for each agent
+  actions      : Matrix[n, T]  # Action history for each agent
+  rewards      : Matrix[n, T]  # Reward history for each agent
+
+PROCEDURE:
+  SET_SEED(seed)
+  
+  # Initialize storage matrices
+  states  ← Matrix[n_agents, n_periods]
+  actions ← Matrix[n_agents, n_periods]
+  rewards ← Matrix[n_agents, n_periods]
+  
+  # Set initial states
+  states[*, 0] ← s_init
+  
+  FOR t = 0 TO n_periods - 1:
+    # Get current states for all agents
+    s_t ← states[*, t]
+    
+    # Compute choice probabilities using closed-form logit formula
+    _, p₁ ← COMPUTE_CHOICE_PROBABILITY(v₀_net, v₁_net, s_t)
+    
+    # Draw actions from Bernoulli distribution
+    u ← UNIFORM(0, 1, n_agents)
+    actions[*, t] ← (u < p₁) ? 1 : 0
+    
+    # Compute flow rewards
+    rewards[*, t] ← COMPUTE_REWARD(s_t, actions[*, t], β)
+    
+    # State transition (if not last period)
+    IF t < n_periods - 1:
+      states[*, t+1] ← COMPUTE_NEXT_STATE(s_t, actions[*, t], γ)
+  
+  RETURN (states, actions, rewards)
+```
+
+### Subroutines
+
+```
+SUBROUTINE: COMPUTE_CHOICE_PROBABILITY
+──────────────────────────────────────
+INPUT:
+  v₀_net : Network           # Trained network for action 0
+  v₁_net : Network           # Trained network for action 1
+  s      : Vector[n]         # States
+OUTPUT:
+  p₀     : Vector[n]         # P(a=0|s)
+  p₁     : Vector[n]         # P(a=1|s)
+
+  # Evaluate value functions
+  v₀ ← EVALUATE_NETWORK(v₀_net, s)
+  v₁ ← EVALUATE_NETWORK(v₁_net, s)
+  
+  # Closed-form logit probabilities (from Type-I EV distribution)
+  # Using numerically stable softmax
+  v_max ← MAX(v₀, v₁)
+  exp₀ ← exp(v₀ - v_max)
+  exp₁ ← exp(v₁ - v_max)
+  sum_exp ← exp₀ + exp₁
+  
+  p₀ ← exp₀ / sum_exp
+  p₁ ← exp₁ / sum_exp
+  
+  RETURN (p₀, p₁)
+```
+
+```
+SUBROUTINE: COMPUTE_REWARD
+──────────────────────────
+INPUT:
+  s      : Vector[n]         # States
+  a      : Vector[n]         # Actions (0 or 1)
+  β      : Scalar            # Reward coefficient
+OUTPUT:
+  r      : Vector[n]         # Flow rewards
+
+  FOR i = 0 TO n - 1:
+    r[i] ← β * log(1 + s[i]) - a[i]
+  RETURN r
+```
+
+```
+SUBROUTINE: COMPUTE_NEXT_STATE
+──────────────────────────────
+INPUT:
+  s      : Vector[n]         # Current states
+  a      : Vector[n]         # Actions (0 or 1)
+  γ      : Scalar            # Decay rate
+OUTPUT:
+  s'     : Vector[n]         # Next states
+
+  FOR i = 0 TO n - 1:
+    s'[i] ← (1 - γ) * s[i] + a[i]
+  RETURN s'
+```
+
+### Properties
+
+The simulation algorithm satisfies the following properties:
+
+1. **Exactness**: Actions are drawn directly from the closed-form logit probabilities:
+   $$P(a=1|s) = \frac{\exp(v(s,1))}{\exp(v(s,0)) + \exp(v(s,1))}$$
+   This uses the analytical result from Type-I Extreme Value shocks rather than simulating the shocks.
+
+2. **Ergodicity**: Under the optimal policy, the state process converges to a stationary distribution (given $0 < \gamma < 1$).
+
+3. **Reproducibility**: Given the same seed, the algorithm produces identical panel data.
