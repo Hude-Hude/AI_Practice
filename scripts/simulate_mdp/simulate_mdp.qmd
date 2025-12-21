@@ -45,6 +45,13 @@ from plotting import (
     plot_choice_probabilities,
     plot_value_difference,
     plot_bellman_residuals,
+    plot_state_evolution,
+    plot_trajectories,
+    plot_choice_validation,
+    plot_calibration,
+    plot_state_transitions,
+    plot_state_distribution,
+    plot_reward_distribution,
 )
 
 print("Modules loaded successfully")
@@ -327,45 +334,7 @@ print(f"  P(a=1):      {late_actions.mean():.3f}")
 #| label: plot-state-evolution
 #| fig-cap: "Evolution of state distribution over time"
 
-import matplotlib.pyplot as plt
-
-fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-
-# Left: Mean state over time with confidence band
-ax0 = axes[0]
-mean_state = panel.states.mean(axis=0)
-std_state = panel.states.std(axis=0)
-periods = np.arange(n_periods)
-
-ax0.plot(periods, mean_state, 'b-', linewidth=2, label='Mean state')
-ax0.fill_between(
-    periods, 
-    mean_state - std_state, 
-    mean_state + std_state, 
-    alpha=0.3, 
-    color='blue',
-    label='±1 std'
-)
-ax0.axhline(y=s_init.mean(), color='gray', linestyle='--', alpha=0.5, label=f'Initial mean: {s_init.mean():.1f}')
-ax0.set_xlabel('Period')
-ax0.set_ylabel('State')
-ax0.set_title('Mean State Over Time')
-ax0.legend()
-ax0.grid(True, alpha=0.3)
-
-# Right: Action rate over time
-ax1 = axes[1]
-action_rate_by_period = panel.actions.mean(axis=0)
-ax1.plot(periods, action_rate_by_period, 'r-', linewidth=2)
-ax1.axhline(y=0.5, color='gray', linestyle='--', alpha=0.5)
-ax1.set_xlabel('Period')
-ax1.set_ylabel('P(a=1|t)')
-ax1.set_title('Investment Rate Over Time')
-ax1.set_ylim(0, 1)
-ax1.grid(True, alpha=0.3)
-
-plt.tight_layout()
-plt.show()
+plot_state_evolution(panel.states, panel.actions, s_init.mean())
 ```
 
 ### Sample Trajectories
@@ -374,22 +343,7 @@ plt.show()
 #| label: plot-trajectories
 #| fig-cap: "Sample agent trajectories showing state evolution"
 
-# Plot sample trajectories
-n_samples = 10
-fig, ax = plt.subplots(figsize=(12, 5))
-
-for i in range(n_samples):
-    ax.plot(periods, panel.states[i, :], alpha=0.6, linewidth=1)
-
-ax.axhline(y=s_init.mean(), color='black', linestyle='--', alpha=0.5, label=f'Initial mean: {s_init.mean():.1f}')
-ax.set_xlabel('Period')
-ax.set_ylabel('State')
-ax.set_title(f'Sample Trajectories ({n_samples} agents)')
-ax.legend()
-ax.grid(True, alpha=0.3)
-
-plt.tight_layout()
-plt.show()
+plot_trajectories(panel.states, s_init.mean(), n_samples=10)
 ```
 
 ### Choice Probability Validation
@@ -398,63 +352,19 @@ plt.show()
 #| label: plot-choice-validation
 #| fig-cap: "Comparison of simulated choice frequencies with theoretical choice probabilities"
 
-# Bin states and compute empirical action frequencies
-n_bins = 20
+# Flatten data for plotting
 state_flat = panel.states.flatten()
 action_flat = panel.actions.flatten()
 
-# Create bins
-bin_edges = np.linspace(state_flat.min(), state_flat.max(), n_bins + 1)
-bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
-
-# Compute empirical P(a=1|s) for each bin
-empirical_prob = np.zeros(n_bins)
-bin_counts = np.zeros(n_bins)
-
-for i in range(n_bins):
-    mask = (state_flat >= bin_edges[i]) & (state_flat < bin_edges[i + 1])
-    if mask.sum() > 0:
-        empirical_prob[i] = action_flat[mask].mean()
-        bin_counts[i] = mask.sum()
-
-# Compute theoretical P(a=1|s) from value functions
+# Compute theoretical probabilities
 s_theory = torch.linspace(state_flat.min(), state_flat.max(), 200)
 with torch.no_grad():
     _, prob_a1_theory = compute_choice_probability(v0_net, v1_net, s_theory)
     prob_a1_theory = prob_a1_theory.numpy()
 
-# Plot comparison
-fig, ax = plt.subplots(figsize=(10, 5))
-
-# Theoretical
-ax.plot(s_theory.numpy(), prob_a1_theory, 'r-', linewidth=2, label='Theoretical P(a=1|s)')
-
-# Empirical (only bins with enough data)
-valid_bins = bin_counts > 50
-ax.scatter(
-    bin_centers[valid_bins], 
-    empirical_prob[valid_bins], 
-    s=50, 
-    c='blue', 
-    alpha=0.7, 
-    label='Simulated (binned)',
-    zorder=5
+rmse = plot_choice_validation(
+    state_flat, action_flat, s_theory.numpy(), prob_a1_theory
 )
-
-ax.set_xlabel('State s')
-ax.set_ylabel('P(a=1|s)')
-ax.set_title('Choice Probability: Theoretical vs Simulated')
-ax.set_ylim(-0.05, 1.05)
-ax.legend()
-ax.grid(True, alpha=0.3)
-
-plt.tight_layout()
-plt.show()
-
-# Compute goodness of fit
-valid_theory = np.interp(bin_centers[valid_bins], s_theory.numpy(), prob_a1_theory)
-rmse = np.sqrt(np.mean((empirical_prob[valid_bins] - valid_theory) ** 2))
-print(f"RMSE between theoretical and simulated choice probabilities: {rmse:.4f}")
 ```
 
 ### Choice Probability Calibration
@@ -469,64 +379,7 @@ with torch.no_grad():
     _, p1_theory_all = compute_choice_probability(v0_net, v1_net, s_all)
     p1_theory_all = p1_theory_all.numpy()
 
-# Use quantile-based binning with more bins for finer granularity
-n_cal_bins = 50
-cal_bin_edges = np.percentile(p1_theory_all, np.linspace(0, 100, n_cal_bins + 1))
-# Ensure unique edges (in case of ties at boundaries)
-cal_bin_edges = np.unique(cal_bin_edges)
-n_cal_bins = len(cal_bin_edges) - 1
-
-# Compute empirical P(a=1) for each theoretical probability bin
-empirical_by_theory = np.zeros(n_cal_bins)
-theory_mean = np.zeros(n_cal_bins)
-cal_bin_counts = np.zeros(n_cal_bins)
-
-for i in range(n_cal_bins):
-    if i == n_cal_bins - 1:
-        # Last bin includes right edge
-        mask = (p1_theory_all >= cal_bin_edges[i]) & (p1_theory_all <= cal_bin_edges[i + 1])
-    else:
-        mask = (p1_theory_all >= cal_bin_edges[i]) & (p1_theory_all < cal_bin_edges[i + 1])
-    if mask.sum() > 0:
-        empirical_by_theory[i] = action_flat[mask].mean()
-        theory_mean[i] = p1_theory_all[mask].mean()
-        cal_bin_counts[i] = mask.sum()
-
-# Plot calibration
-fig, ax = plt.subplots(figsize=(8, 8))
-
-# 45-degree line (perfect calibration)
-ax.plot([0, 1], [0, 1], 'k--', linewidth=2, label='Perfect calibration', alpha=0.7)
-
-# Calibration points
-valid_cal = cal_bin_counts > 0
-ax.scatter(
-    theory_mean[valid_cal], 
-    empirical_by_theory[valid_cal], 
-    s=50, 
-    c='blue', 
-    alpha=0.7, 
-    zorder=5,
-    label=f'Binned observations (n={valid_cal.sum()})'
-)
-
-ax.set_xlabel('Theoretical P(a=1|s)')
-ax.set_ylabel('Empirical P(a=1|s)')
-ax.set_title('Calibration Plot: Empirical vs Theoretical Choice Probability')
-ax.set_xlim(-0.05, 1.05)
-ax.set_ylim(-0.05, 1.05)
-ax.set_aspect('equal')
-ax.legend(loc='upper left')
-ax.grid(True, alpha=0.3)
-
-plt.tight_layout()
-plt.show()
-
-# Calibration statistics
-cal_rmse = np.sqrt(np.mean((empirical_by_theory[valid_cal] - theory_mean[valid_cal]) ** 2))
-print(f"Calibration RMSE: {cal_rmse:.4f}")
-print(f"Number of bins: {valid_cal.sum()}")
-print(f"Theoretical probability range: [{p1_theory_all.min():.3f}, {p1_theory_all.max():.3f}]")
+cal_rmse = plot_calibration(action_flat, p1_theory_all, n_bins=50)
 ```
 
 ### State Transition Dynamics
@@ -535,53 +388,7 @@ print(f"Theoretical probability range: [{p1_theory_all.min():.3f}, {p1_theory_al
 #| label: plot-transitions
 #| fig-cap: "State transition dynamics: current state vs next state by action"
 
-# Extract transitions (excluding last period)
-s_current = panel.states[:, :-1].flatten()
-s_next = panel.states[:, 1:].flatten()
-a_current = panel.actions[:, :-1].flatten()
-
-# Separate by action
-mask_a0 = a_current == 0
-mask_a1 = a_current == 1
-
-fig, ax = plt.subplots(figsize=(10, 8))
-
-# Scatter plot (subsample for visibility)
-subsample = 5000
-np.random.seed(42)
-idx = np.random.choice(len(s_current), size=min(subsample, len(s_current)), replace=False)
-
-ax.scatter(
-    s_current[idx][mask_a0[idx]], 
-    s_next[idx][mask_a0[idx]], 
-    alpha=0.3, 
-    s=10, 
-    c='blue', 
-    label='a=0 (no investment)'
-)
-ax.scatter(
-    s_current[idx][mask_a1[idx]], 
-    s_next[idx][mask_a1[idx]], 
-    alpha=0.3, 
-    s=10, 
-    c='red', 
-    label='a=1 (investment)'
-)
-
-# Theoretical transition lines
-s_line = np.linspace(0, panel.states.max(), 100)
-ax.plot(s_line, (1 - gamma) * s_line, 'b--', linewidth=2, label=f"s' = {1-gamma:.1f}s (a=0)")
-ax.plot(s_line, (1 - gamma) * s_line + 1, 'r--', linewidth=2, label=f"s' = {1-gamma:.1f}s + 1 (a=1)")
-
-ax.set_xlabel('Current State s')
-ax.set_ylabel('Next State s\'')
-ax.set_title('State Transitions by Action')
-ax.legend()
-ax.grid(True, alpha=0.3)
-ax.set_aspect('equal', adjustable='box')
-
-plt.tight_layout()
-plt.show()
+plot_state_transitions(panel.states, panel.actions, gamma)
 ```
 
 ### State Distribution (Initial vs Final)
@@ -591,36 +398,7 @@ plt.show()
 #| fig-cap: "Distribution of states: initial (t=0) vs final (t=T-1)"
 
 final_states = panel.states[:, -1]
-
-fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-
-# Left: Initial states distribution
-ax0 = axes[0]
-ax0.hist(s_init, bins=20, density=True, alpha=0.7, color='steelblue', edgecolor='white')
-ax0.axvline(x=s_init.mean(), color='red', linestyle='--', linewidth=2, label=f'Mean: {s_init.mean():.2f}')
-ax0.set_xlabel('State s')
-ax0.set_ylabel('Density')
-ax0.set_title(f'Initial States (t=0)\nUniform[{s_min}, {s_max}]')
-ax0.legend()
-ax0.grid(True, alpha=0.3)
-
-# Right: Final states distribution
-ax1 = axes[1]
-ax1.hist(final_states, bins=20, density=True, alpha=0.7, color='teal', edgecolor='white')
-ax1.axvline(x=final_states.mean(), color='red', linestyle='--', linewidth=2, label=f'Mean: {final_states.mean():.2f}')
-ax1.set_xlabel('State s')
-ax1.set_ylabel('Density')
-ax1.set_title(f'Final States (t={n_periods-1})\n(Stationary Distribution)')
-ax1.legend()
-ax1.grid(True, alpha=0.3)
-
-plt.tight_layout()
-plt.show()
-
-print(f"Initial States (t=0):")
-print(f"  Mean: {s_init.mean():.2f}, Std: {s_init.std():.2f}")
-print(f"\nFinal States (t={n_periods-1}):")
-print(f"  Mean: {final_states.mean():.2f}, Std: {final_states.std():.2f}")
+plot_state_distribution(s_init, final_states, s_min, s_max, n_periods)
 ```
 
 ### Reward Distribution (Cumulative vs Discounted)
@@ -629,44 +407,7 @@ print(f"  Mean: {final_states.mean():.2f}, Std: {final_states.std():.2f}")
 #| label: plot-reward-distribution
 #| fig-cap: "Distribution of total rewards: cumulative vs discounted"
 
-# Compute cumulative rewards (simple sum)
-cumulative_rewards = panel.rewards.sum(axis=1)  # Shape: (n_agents,)
-
-# Compute discounted rewards: sum_{t=0}^{T-1} delta^t * r_t
-discount_factors = delta ** np.arange(n_periods)  # [1, delta, delta^2, ..., delta^{T-1}]
-discounted_rewards = (panel.rewards * discount_factors).sum(axis=1)  # Shape: (n_agents,)
-
-fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-
-# Left: Cumulative rewards histogram
-ax0 = axes[0]
-ax0.hist(cumulative_rewards, bins=20, density=True, alpha=0.7, color='purple', edgecolor='white')
-ax0.axvline(x=cumulative_rewards.mean(), color='red', linestyle='--', linewidth=2, 
-            label=f'Mean: {cumulative_rewards.mean():.1f}')
-ax0.set_xlabel('Cumulative Reward (Σ rₜ)')
-ax0.set_ylabel('Density')
-ax0.set_title('Cumulative Rewards (Undiscounted)')
-ax0.legend()
-ax0.grid(True, alpha=0.3)
-
-# Right: Discounted rewards histogram
-ax1 = axes[1]
-ax1.hist(discounted_rewards, bins=20, density=True, alpha=0.7, color='darkgreen', edgecolor='white')
-ax1.axvline(x=discounted_rewards.mean(), color='red', linestyle='--', linewidth=2,
-            label=f'Mean: {discounted_rewards.mean():.1f}')
-ax1.set_xlabel(f'Discounted Reward (Σ δᵗrₜ, δ={delta})')
-ax1.set_ylabel('Density')
-ax1.set_title('Discounted Rewards')
-ax1.legend()
-ax1.grid(True, alpha=0.3)
-
-plt.tight_layout()
-plt.show()
-
-print(f"Cumulative Rewards (Σ rₜ):")
-print(f"  Mean: {cumulative_rewards.mean():.2f}, Std: {cumulative_rewards.std():.2f}")
-print(f"\nDiscounted Rewards (Σ δᵗrₜ, δ={delta}):")
-print(f"  Mean: {discounted_rewards.mean():.2f}, Std: {discounted_rewards.std():.2f}")
+cumulative_rewards, discounted_rewards = plot_reward_distribution(panel.rewards, delta)
 ```
 
 ## Summary
