@@ -56,40 +56,6 @@ Successfully recovers structural parameters using two-step estimation:
 
 ---
 
-## Quick Start
-
-### Installation
-
-```bash
-git clone https://github.com/Hude-Hude/MDP_Practice.git
-cd MDP_Practice
-uv sync
-```
-
-### Run the Full Pipeline
-
-```bash
-# 1. Solve the MDP (trains neural network value functions)
-cd scripts/solve_mdp && quarto render solve_mdp.qmd
-
-# 2. Simulate panel data (Monte Carlo simulation)
-cd ../simulate_mdp && quarto render simulate_mdp.qmd
-
-# 3. Estimate structural parameters (recover true values)
-cd ../estimate_mdp && quarto render estimate_mdp.qmd
-```
-
-### Interactive Development
-
-```bash
-# Start live preview servers
-quarto preview scripts/solve_mdp/solve_mdp.qmd --port 7629 &
-quarto preview scripts/simulate_mdp/simulate_mdp.qmd --port 7630 &
-quarto preview scripts/estimate_mdp/estimate_mdp.qmd --port 7628 &
-```
-
----
-
 ## Project Structure
 
 ```
