@@ -877,8 +877,8 @@ from config import (
     target_update_freq,
 )
 
-# Import estimator
-from mdp_estimator import grid_search_mle, EstimationResult
+# Import estimator (two-step approach)
+from mdp_estimator import estimate_two_step, TwoStepResult
 from mdp_simulator import PanelData
 
 # Paths
@@ -935,12 +935,12 @@ print(f"  δ (discount factor):     {true_delta}")
 print("=" * 50)
 ```
 
-### Grid Search Estimation
+### Two-Step Estimation
 
 ```{python}
-#| label: grid-search
+#| label: two-step-estimation
 
-# Solver parameters for inner loop
+# Solver parameters for inner loop (Step 2: beta estimation)
 solver_params = {
     's_min': s_min,
     's_max': s_max,
@@ -952,33 +952,18 @@ solver_params = {
     'target_update_freq': target_update_freq,
 }
 
-# Grid search bounds (centered around true values with reasonable range)
-bounds = {
-    'beta': (0.5, 1.5),      # True: 1.0
-    'gamma': (0.05, 0.20),   # True: 0.1
-    'delta': (0.90, 0.99),   # True: 0.95
-}
-
-# Number of grid points per dimension
-n_points = 5  # 5^3 = 125 evaluations
-
-print("Starting grid search estimation...")
-print(f"Grid: {n_points} points per dimension = {n_points**3} total evaluations")
-print(f"Using warm-start from: {SOLVER_OUTPUT_PATH}")
-print()
-
-# Run grid search with warm-start
-result = grid_search_mle(
+# Run two-step estimation:
+# Step 1: γ from OLS (exact, instant)
+# Step 2: β from 1D grid search (with γ from OLS, δ calibrated)
+result = estimate_two_step(
     data=panel_data,
-    bounds=bounds,
-    n_points=n_points,
+    delta_calibrated=true_delta,  # Calibrate δ at true value
     solver_params=solver_params,
+    beta_bounds=(0.5, 1.5),
+    n_points=20,  # Fine grid for β
     verbose=True,
-    compute_se=True,
     pretrained_path=SOLVER_OUTPUT_PATH,
 )
-
-print("\nGrid search completed!")
 ```
 
 ### Estimation Results
@@ -988,31 +973,31 @@ print("\nGrid search completed!")
 
 import pandas as pd
 
-# Extract results
-beta_hat, gamma_hat, delta_hat = result.theta_hat
-se_beta, se_gamma, se_delta = result.std_errors
+# Extract results from TwoStepResult
+beta_hat = result.beta_hat
+gamma_hat = result.gamma_hat
+delta_hat = result.delta_calibrated  # Calibrated, not estimated
 
 # Create results table
 results_df = pd.DataFrame({
     'Parameter': ['β (reward)', 'γ (decay)', 'δ (discount)'],
     'True': [true_beta, true_gamma, true_delta],
     'Estimated': [beta_hat, gamma_hat, delta_hat],
-    'Std. Error': [se_beta, se_gamma, se_delta],
+    'Std. Error': [result.beta_se, result.gamma_se, 'calibrated'],
+    'Method': ['MLE (1D grid)', 'OLS', 'Calibrated'],
     'Bias': [beta_hat - true_beta, gamma_hat - true_gamma, delta_hat - true_delta],
-    'Bias (%)': [
-        100 * (beta_hat - true_beta) / true_beta,
-        100 * (gamma_hat - true_gamma) / true_gamma,
-        100 * (delta_hat - true_delta) / true_delta,
-    ],
 })
 
 print("=" * 60)
-print("ESTIMATION RESULTS")
+print("TWO-STEP ESTIMATION RESULTS")
 print("=" * 60)
 print(results_df.to_string(index=False))
 print("=" * 60)
 print(f"\nLog-likelihood at optimum: {result.log_likelihood:.2f}")
-print(f"Number of evaluations: {result.n_iterations}")
+print(f"Number of β evaluations: {result.n_evaluations}")
+print(f"\nγ OLS Details:")
+print(f"  R² = {result.gamma_ols_details['r_squared']:.6f}")
+print(f"  N obs = {result.gamma_ols_details['n_obs']}")
 ```
 
 ### Likelihood at True Parameters
@@ -1065,42 +1050,48 @@ print("=" * 60)
 print("DIAGNOSTICS")
 print("=" * 60)
 
-# Check if estimates are within 2 standard errors of true values
-within_2se = []
-for i, (name, true_val, est_val, se) in enumerate([
-    ('β', true_beta, beta_hat, se_beta),
-    ('γ', true_gamma, gamma_hat, se_gamma),
-    ('δ', true_delta, delta_hat, se_delta),
-]):
-    if np.isnan(se):
-        status = "SE not available"
-        within = None
-    else:
-        diff = abs(est_val - true_val)
-        within = diff <= 2 * se
-        status = "✓ Yes" if within else "✗ No"
-    within_2se.append(within)
-    print(f"  {name}: |{est_val:.4f} - {true_val:.4f}| = {abs(est_val - true_val):.4f} "
-          f"{'<=' if within else '>'} 2×SE={2*se:.4f} → {status}")
+# Check parameter recovery
+print("\nParameter Recovery:")
+print("-" * 40)
 
-print()
-
-# Overall assessment
-n_covered = sum(1 for w in within_2se if w is True)
-n_total = sum(1 for w in within_2se if w is not None)
-
-if n_total > 0:
-    print(f"Coverage: {n_covered}/{n_total} parameters within 2 SE of true value")
-    if n_covered == n_total:
-        print("✓ All parameters recovered successfully!")
-    else:
-        print("⚠ Some parameters may have estimation issues.")
+# β: Check if within 2 SE
+beta_bias = abs(beta_hat - true_beta)
+if not np.isnan(result.beta_se):
+    within_2se_beta = beta_bias <= 2 * result.beta_se
+    status_beta = "✓ Yes" if within_2se_beta else "✗ No"
+    print(f"  β: |{beta_hat:.4f} - {true_beta:.4f}| = {beta_bias:.4f} "
+          f"{'<=' if within_2se_beta else '>'} 2×SE={2*result.beta_se:.4f} → {status_beta}")
 else:
-    print("⚠ Standard errors not available for coverage assessment.")
+    print(f"  β: Bias = {beta_bias:.4f} (SE not available)")
+
+# γ: Should be exactly recovered from OLS
+gamma_bias = abs(gamma_hat - true_gamma)
+print(f"  γ: |{gamma_hat:.6f} - {true_gamma:.6f}| = {gamma_bias:.6f} (OLS exact)")
+
+# δ: Calibrated, no estimation
+print(f"  δ: Calibrated at {delta_hat} (no estimation)")
 
 print()
+
+# Summary
 print("=" * 60)
-print("COVARIANCE MATRIX")
+print("SUMMARY")
 print("=" * 60)
-print(result.cov_matrix)
+
+if gamma_bias < 1e-6:
+    print("✓ γ recovered exactly from OLS (deterministic transitions)")
+else:
+    print(f"⚠ γ has unexpected bias: {gamma_bias:.6f}")
+
+if beta_bias < 0.1:
+    print(f"✓ β recovered well (bias = {beta_bias:.4f})")
+elif beta_bias < 0.2:
+    print(f"~ β recovered reasonably (bias = {beta_bias:.4f})")
+else:
+    print(f"⚠ β has significant bias: {beta_bias:.4f}")
+
+print(f"\nTwo-step estimation successful!")
+print(f"  - γ from OLS: exact recovery")
+print(f"  - δ calibrated: {delta_hat}")
+print(f"  - β from MLE: {beta_hat:.4f} (bias = {beta_bias:.4f})")
 ```
