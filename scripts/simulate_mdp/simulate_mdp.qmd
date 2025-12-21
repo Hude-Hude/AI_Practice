@@ -457,6 +457,78 @@ rmse = np.sqrt(np.mean((empirical_prob[valid_bins] - valid_theory) ** 2))
 print(f"RMSE between theoretical and simulated choice probabilities: {rmse:.4f}")
 ```
 
+### Choice Probability Calibration
+
+```{python}
+#| label: plot-calibration
+#| fig-cap: "Calibration plot: empirical vs theoretical choice probabilities"
+
+# Compute theoretical P(a=1|s) for all observations
+s_all = torch.tensor(state_flat, dtype=torch.float32)
+with torch.no_grad():
+    _, p1_theory_all = compute_choice_probability(v0_net, v1_net, s_all)
+    p1_theory_all = p1_theory_all.numpy()
+
+# Use quantile-based binning with more bins for finer granularity
+n_cal_bins = 50
+cal_bin_edges = np.percentile(p1_theory_all, np.linspace(0, 100, n_cal_bins + 1))
+# Ensure unique edges (in case of ties at boundaries)
+cal_bin_edges = np.unique(cal_bin_edges)
+n_cal_bins = len(cal_bin_edges) - 1
+
+# Compute empirical P(a=1) for each theoretical probability bin
+empirical_by_theory = np.zeros(n_cal_bins)
+theory_mean = np.zeros(n_cal_bins)
+cal_bin_counts = np.zeros(n_cal_bins)
+
+for i in range(n_cal_bins):
+    if i == n_cal_bins - 1:
+        # Last bin includes right edge
+        mask = (p1_theory_all >= cal_bin_edges[i]) & (p1_theory_all <= cal_bin_edges[i + 1])
+    else:
+        mask = (p1_theory_all >= cal_bin_edges[i]) & (p1_theory_all < cal_bin_edges[i + 1])
+    if mask.sum() > 0:
+        empirical_by_theory[i] = action_flat[mask].mean()
+        theory_mean[i] = p1_theory_all[mask].mean()
+        cal_bin_counts[i] = mask.sum()
+
+# Plot calibration
+fig, ax = plt.subplots(figsize=(8, 8))
+
+# 45-degree line (perfect calibration)
+ax.plot([0, 1], [0, 1], 'k--', linewidth=2, label='Perfect calibration', alpha=0.7)
+
+# Calibration points
+valid_cal = cal_bin_counts > 0
+ax.scatter(
+    theory_mean[valid_cal], 
+    empirical_by_theory[valid_cal], 
+    s=50, 
+    c='blue', 
+    alpha=0.7, 
+    zorder=5,
+    label=f'Binned observations (n={valid_cal.sum()})'
+)
+
+ax.set_xlabel('Theoretical P(a=1|s)')
+ax.set_ylabel('Empirical P(a=1|s)')
+ax.set_title('Calibration Plot: Empirical vs Theoretical Choice Probability')
+ax.set_xlim(-0.05, 1.05)
+ax.set_ylim(-0.05, 1.05)
+ax.set_aspect('equal')
+ax.legend(loc='upper left')
+ax.grid(True, alpha=0.3)
+
+plt.tight_layout()
+plt.show()
+
+# Calibration statistics
+cal_rmse = np.sqrt(np.mean((empirical_by_theory[valid_cal] - theory_mean[valid_cal]) ** 2))
+print(f"Calibration RMSE: {cal_rmse:.4f}")
+print(f"Number of bins: {valid_cal.sum()}")
+print(f"Theoretical probability range: [{p1_theory_all.min():.3f}, {p1_theory_all.max():.3f}]")
+```
+
 ### State Transition Dynamics
 
 ```{python}
@@ -500,8 +572,6 @@ ax.scatter(
 s_line = np.linspace(0, panel.states.max(), 100)
 ax.plot(s_line, (1 - gamma) * s_line, 'b--', linewidth=2, label=f"s' = {1-gamma:.1f}s (a=0)")
 ax.plot(s_line, (1 - gamma) * s_line + 1, 'r--', linewidth=2, label=f"s' = {1-gamma:.1f}s + 1 (a=1)")
-
-ax.plot([0, panel.states.max()], [0, panel.states.max()], 'k:', alpha=0.3, label='45° line')
 
 ax.set_xlabel('Current State s')
 ax.set_ylabel('Next State s\'')
