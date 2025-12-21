@@ -395,6 +395,9 @@ def compute_standard_errors(
             # Second derivative approximation
             hessian[i, j] = (f_pp - f_pm - f_mp + f_mm) / (4 * eps * eps)
     
+    # Symmetrize Hessian (numerical differentiation can introduce asymmetry)
+    hessian = (hessian + hessian.T) / 2
+    
     # Covariance matrix = inverse of negative Hessian (information matrix)
     info_matrix = -hessian
     
