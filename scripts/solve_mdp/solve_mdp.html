@@ -687,9 +687,9 @@ OUTPUT:
 </section>
 <section id="model-parameters" class="level3">
 <h3 class="anchored" data-anchor-id="model-parameters">Model Parameters</h3>
-<div id="f43cd88d" class="cell" data-execution_count="2">
+<div id="5d3c300e" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Model parameters</span></span>
-<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>beta <span class="op">=</span> <span class="fl">0.5</span>      <span class="co"># Utility coefficient in reward: β * log(1+s)</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>beta <span class="op">=</span> <span class="fl">1.0</span>      <span class="co"># Utility coefficient in reward: β * log(1+s)</span></span>
 <span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>gamma <span class="op">=</span> <span class="fl">0.1</span>     <span class="co"># State decay rate</span></span>
 <span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>delta <span class="op">=</span> <span class="fl">0.95</span>    <span class="co"># Discount factor</span></span>
 <span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a></span>
@@ -711,7 +711,7 @@ OUTPUT:
 <span id="cb20-21"><a href="#cb20-21" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Transition: s' = </span><span class="sc">{</span><span class="dv">1</span><span class="op">-</span>gamma<span class="sc">:.1f}</span><span class="ss"> * s + a"</span>)</span>
 <span id="cb20-22"><a href="#cb20-22" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Discount factor: δ = </span><span class="sc">{</span>delta<span class="sc">}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Model: u(s,a) = 0.5 * log(1+s) - a
+<pre><code>Model: u(s,a) = 1.0 * log(1+s) - a
 Transition: s' = 0.9 * s + a
 Discount factor: δ = 0.95</code></pre>
 </div>
@@ -741,8 +741,8 @@ Discount factor: δ = 0.95</code></pre>
 <span id="cb22-19"><a href="#cb22-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Converged in </span><span class="sc">{</span>n_iter<span class="sc">}</span><span class="ss"> iterations"</span>)</span>
 <span id="cb22-20"><a href="#cb22-20" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Final RMSE: </span><span class="sc">{</span>losses[<span class="op">-</span><span class="dv">1</span>]<span class="op">**</span><span class="fl">0.5</span><span class="sc">:.2e}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Converged in 637 iterations
-Final RMSE: 9.95e-03</code></pre>
+<pre><code>Converged in 1025 iterations
+Final RMSE: 9.94e-03</code></pre>
 </div>
 </div>
 </section>
@@ -750,7 +750,7 @@ Final RMSE: 9.95e-03</code></pre>
 <h3 class="anchored" data-anchor-id="results">Results</h3>
 <section id="convergence-plot" class="level4">
 <h4 class="anchored" data-anchor-id="convergence-plot">Convergence Plot</h4>
-<div id="abcbadc8" class="cell" data-execution_count="4">
+<div id="422e1778" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>plt.figure(figsize<span class="op">=</span>(<span class="dv">10</span>, <span class="dv">4</span>))</span>
 <span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a>plt.semilogy(losses, <span class="st">'b-'</span>, linewidth<span class="op">=</span><span class="fl">0.5</span>)</span>
 <span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">'Iteration'</span>)</span>
@@ -771,7 +771,7 @@ Final RMSE: 9.95e-03</code></pre>
 </section>
 <section id="value-functions" class="level4">
 <h4 class="anchored" data-anchor-id="value-functions">Value Functions</h4>
-<div id="ddb81550" class="cell" data-execution_count="5">
+<div id="5fd8d60c" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Create evaluation grid</span></span>
 <span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a>s_eval <span class="op">=</span> torch.linspace(s_min, s_max, <span class="dv">200</span>)</span>
 <span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -806,7 +806,7 @@ Final RMSE: 9.95e-03</code></pre>
 </section>
 <section id="choice-probabilities" class="level4">
 <h4 class="anchored" data-anchor-id="choice-probabilities">Choice Probabilities</h4>
-<div id="097c64fb" class="cell" data-execution_count="6">
+<div id="95e10236" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Compute choice probabilities</span></span>
 <span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> torch.no_grad():</span>
 <span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a>    prob_a0, prob_a1 <span class="op">=</span> compute_choice_probability(v0_net, v1_net, s_eval)</span>
@@ -837,7 +837,7 @@ Final RMSE: 9.95e-03</code></pre>
 </section>
 <section id="value-difference" class="level4">
 <h4 class="anchored" data-anchor-id="value-difference">Value Difference</h4>
-<div id="174743fc" class="cell" data-execution_count="7">
+<div id="017914a0" class="cell" data-execution_count="7">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>plt.figure(figsize<span class="op">=</span>(<span class="dv">10</span>, <span class="dv">5</span>))</span>
 <span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a>value_diff <span class="op">=</span> v1_values <span class="op">-</span> v0_values</span>
 <span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a>plt.plot(s_np, value_diff, <span class="st">'m-'</span>, linewidth<span class="op">=</span><span class="dv">2</span>)</span>
@@ -860,7 +860,7 @@ Final RMSE: 9.95e-03</code></pre>
 </section>
 <section id="bellman-residuals" class="level4">
 <h4 class="anchored" data-anchor-id="bellman-residuals">Bellman Residuals</h4>
-<div id="623e8479" class="cell" data-execution_count="8">
+<div id="a934a1b9" class="cell" data-execution_count="8">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Compute Bellman targets at evaluation points</span></span>
 <span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> torch.no_grad():</span>
 <span id="cb28-3"><a href="#cb28-3" aria-hidden="true" tabindex="-1"></a>    target0, target1 <span class="op">=</span> compute_bellman_targets(</span>
@@ -911,16 +911,16 @@ Final RMSE: 9.95e-03</code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Bellman Residual Summary:
-  a=0: Mean = -0.019731, Max |residual| = 0.046167
-  a=1: Mean = 0.009504, Max |residual| = 0.027905
-  Combined RMSE = 0.018434</code></pre>
+  a=0: Mean = -0.003842, Max |residual| = 0.044720
+  a=1: Mean = -0.006248, Max |residual| = 0.043587
+  Combined RMSE = 0.011316</code></pre>
 </div>
 </div>
 </section>
 </section>
 <section id="interpretation-1" class="level3">
 <h3 class="anchored" data-anchor-id="interpretation-1">Interpretation</h3>
-<div id="44dc8fd0" class="cell" data-execution_count="9">
+<div id="dd8893d1" class="cell" data-execution_count="9">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb30"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Find threshold state where P(a=1) ≈ 0.5</span></span>
 <span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a>threshold_idx <span class="op">=</span> np.argmin(np.<span class="bu">abs</span>(prob_a1 <span class="op">-</span> <span class="fl">0.5</span>))</span>
 <span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a>threshold_state <span class="op">=</span> s_np[threshold_idx]</span>
@@ -933,10 +933,10 @@ Final RMSE: 9.95e-03</code></pre>
 <span id="cb30-10"><a href="#cb30-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"- Low state: Investment pays off (builds future value)"</span>)</span>
 <span id="cb30-11"><a href="#cb30-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"- High state: Already earning good rewards, investment cost outweighs benefit"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Policy Interpretation (β=0.5, γ=0.1, δ=0.95):
-- At state s ≈ 1.21, the agent is indifferent between actions
-- For s &lt; 1.21, investment (a=1) is more likely
-- For s &gt; 1.21, no investment (a=0) is more likely
+<pre><code>Policy Interpretation (β=1.0, γ=0.1, δ=0.95):
+- At state s ≈ 5.83, the agent is indifferent between actions
+- For s &lt; 5.83, investment (a=1) is more likely
+- For s &gt; 5.83, no investment (a=0) is more likely
 
 This reflects the trade-off:
 - Low state: Investment pays off (builds future value)
@@ -1004,7 +1004,7 @@ Complete!</code></pre>
 </div>
 <section id="value-functions-by-action" class="level3">
 <h3 class="anchored" data-anchor-id="value-functions-by-action">Value Functions by Action</h3>
-<div id="6f372fdc" class="cell" data-execution_count="11">
+<div id="ecde01e4" class="cell" data-execution_count="11">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb34"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">14</span>, <span class="dv">5</span>))</span>
 <span id="cb34-2"><a href="#cb34-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb34-3"><a href="#cb34-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot v(s, 0) - No investment (black to blue)</span></span>
@@ -1053,7 +1053,7 @@ Complete!</code></pre>
 </section>
 <section id="choice-probabilities-by-action" class="level3">
 <h3 class="anchored" data-anchor-id="choice-probabilities-by-action">Choice Probabilities by Action</h3>
-<div id="d51a11cb" class="cell" data-execution_count="12">
+<div id="fcc71950" class="cell" data-execution_count="12">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb35"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">14</span>, <span class="dv">5</span>))</span>
 <span id="cb35-2"><a href="#cb35-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb35-3"><a href="#cb35-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot P(a=0|s) - No investment (black to blue)</span></span>
@@ -1104,7 +1104,7 @@ Complete!</code></pre>
 </section>
 <section id="summary-β" class="level3">
 <h3 class="anchored" data-anchor-id="summary-β">Summary (β)</h3>
-<div id="08703891" class="cell" data-execution_count="13">
+<div id="d73d7399" class="cell" data-execution_count="13">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb36"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"Comparative Statics Summary: Effect of β on Value Functions"</span>)</span>
 <span id="cb36-2"><a href="#cb36-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"="</span> <span class="op">*</span> <span class="dv">60</span>)</span>
 <span id="cb36-3"><a href="#cb36-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"</span><span class="ch">\n</span><span class="ss">Fixed parameters: γ=</span><span class="sc">{</span>gamma<span class="sc">}</span><span class="ss">, δ=</span><span class="sc">{</span>delta<span class="sc">}</span><span class="ss">"</span>)</span>
@@ -1181,7 +1181,7 @@ Complete!</code></pre>
 </div>
 <section id="value-functions-by-action-γ" class="level3">
 <h3 class="anchored" data-anchor-id="value-functions-by-action-γ">Value Functions by Action (γ)</h3>
-<div id="16fb2bcc" class="cell" data-execution_count="15">
+<div id="a11e7016" class="cell" data-execution_count="15">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb40"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">14</span>, <span class="dv">5</span>))</span>
 <span id="cb40-2"><a href="#cb40-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb40-3"><a href="#cb40-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot v(s, 0) - No investment (black to blue)</span></span>
@@ -1230,7 +1230,7 @@ Complete!</code></pre>
 </section>
 <section id="choice-probabilities-by-action-γ" class="level3">
 <h3 class="anchored" data-anchor-id="choice-probabilities-by-action-γ">Choice Probabilities by Action (γ)</h3>
-<div id="b01f4984" class="cell" data-execution_count="16">
+<div id="354bd073" class="cell" data-execution_count="16">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb41"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">14</span>, <span class="dv">5</span>))</span>
 <span id="cb41-2"><a href="#cb41-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb41-3"><a href="#cb41-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot P(a=0|s) - No investment (black to blue)</span></span>
@@ -1281,7 +1281,7 @@ Complete!</code></pre>
 </section>
 <section id="summary-γ" class="level3">
 <h3 class="anchored" data-anchor-id="summary-γ">Summary (γ)</h3>
-<div id="81c96c0d" class="cell" data-execution_count="17">
+<div id="e7a94941" class="cell" data-execution_count="17">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb42"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"Comparative Statics Summary: Effect of γ on Value Functions"</span>)</span>
 <span id="cb42-2"><a href="#cb42-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"="</span> <span class="op">*</span> <span class="dv">60</span>)</span>
 <span id="cb42-3"><a href="#cb42-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"</span><span class="ch">\n</span><span class="ss">Fixed parameters: β=</span><span class="sc">{</span>beta<span class="sc">}</span><span class="ss">, δ=</span><span class="sc">{</span>delta<span class="sc">}</span><span class="ss">"</span>)</span>
@@ -1295,7 +1295,7 @@ Complete!</code></pre>
 <pre><code>Comparative Statics Summary: Effect of γ on Value Functions
 ============================================================
 
-Fixed parameters: β=0.5, δ=0.95
+Fixed parameters: β=1.0, δ=0.95
 γ varied from 0 to 0.1 in steps of 0.025
 
 Key observations:
