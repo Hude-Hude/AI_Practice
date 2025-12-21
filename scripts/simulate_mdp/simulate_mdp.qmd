@@ -440,3 +440,186 @@ print(f"  ✓ State transitions follow s' = (1-γ)s + a")
 print(f"  ✓ Empirical choice frequencies match theoretical logit probabilities")
 print(f"  ✓ State distribution converges to a stationary distribution")
 ```
+
+## Diagnostics
+
+```{python}
+#| label: diagnostics
+
+print("=" * 60)
+print("SIMULATION DIAGNOSTICS")
+print("=" * 60)
+
+# -----------------------------------------------------------------------------
+# 1. Choice Probability Validation
+# -----------------------------------------------------------------------------
+print("\n1. CHOICE PROBABILITY VALIDATION")
+print("-" * 40)
+
+if rmse < 0.01:
+    prob_status = "✓ EXCELLENT"
+    prob_msg = "Empirical choices closely match theoretical probabilities"
+elif rmse < 0.05:
+    prob_status = "✓ GOOD"
+    prob_msg = "Minor deviations, likely due to sampling variance"
+elif rmse < 0.10:
+    prob_status = "⚠ WARNING"
+    prob_msg = "Moderate deviations detected - consider larger sample"
+else:
+    prob_status = "✗ POOR"
+    prob_msg = "Large deviations - potential implementation issue"
+
+print(f"   RMSE: {rmse:.4f}")
+print(f"   Status: {prob_status}")
+print(f"   {prob_msg}")
+
+# -----------------------------------------------------------------------------
+# 2. Calibration Quality
+# -----------------------------------------------------------------------------
+print("\n2. CALIBRATION QUALITY")
+print("-" * 40)
+
+if cal_rmse < 0.01:
+    cal_status = "✓ EXCELLENT"
+    cal_msg = "Perfect calibration - simulation draws from correct distribution"
+elif cal_rmse < 0.03:
+    cal_status = "✓ GOOD"
+    cal_msg = "Well-calibrated with minor sampling noise"
+elif cal_rmse < 0.05:
+    cal_status = "⚠ WARNING"
+    cal_msg = "Some miscalibration - check binning or sample size"
+else:
+    cal_status = "✗ POOR"
+    cal_msg = "Significant miscalibration - verify action drawing mechanism"
+
+print(f"   Calibration RMSE: {cal_rmse:.4f}")
+print(f"   Status: {cal_status}")
+print(f"   {cal_msg}")
+
+# -----------------------------------------------------------------------------
+# 3. State Convergence Analysis
+# -----------------------------------------------------------------------------
+print("\n3. STATE CONVERGENCE ANALYSIS")
+print("-" * 40)
+
+# Check if states have converged by comparing early vs late periods
+early_mean = panel.states[:, :20].mean()
+late_mean = panel.states[:, -20:].mean()
+convergence_diff = abs(late_mean - early_mean)
+
+# Compute steady-state theoretical value (approximate)
+# At steady state: E[s'] = E[s] => (1-γ)E[s] + E[a] = E[s] => E[s] = E[a]/γ
+late_action_rate = panel.actions[:, -20:].mean()
+theoretical_steady_state = late_action_rate / gamma
+
+steady_state_error = abs(late_mean - theoretical_steady_state)
+
+if convergence_diff < 0.5 and steady_state_error < 0.5:
+    conv_status = "✓ CONVERGED"
+    conv_msg = "State distribution has reached stationarity"
+elif convergence_diff < 1.0:
+    conv_status = "⚠ NEARLY CONVERGED"
+    conv_msg = "Close to stationary - consider more periods"
+else:
+    conv_status = "✗ NOT CONVERGED"
+    conv_msg = "Still transitioning - increase simulation length"
+
+print(f"   Early mean (t<20):  {early_mean:.2f}")
+print(f"   Late mean (t≥{n_periods-20}):   {late_mean:.2f}")
+print(f"   Theoretical steady state: {theoretical_steady_state:.2f}")
+print(f"   Status: {conv_status}")
+print(f"   {conv_msg}")
+
+# -----------------------------------------------------------------------------
+# 4. State Transition Verification
+# -----------------------------------------------------------------------------
+print("\n4. STATE TRANSITION VERIFICATION")
+print("-" * 40)
+
+# Verify transitions match model
+s_current = panel.states[:, :-1].flatten()
+s_next_actual = panel.states[:, 1:].flatten()
+a_taken = panel.actions[:, :-1].flatten()
+
+# Expected next state
+s_next_expected = (1 - gamma) * s_current + a_taken
+
+# Compute transition error
+transition_error = np.abs(s_next_actual - s_next_expected).max()
+
+if transition_error < 1e-6:
+    trans_status = "✓ EXACT"
+    trans_msg = "State transitions perfectly follow s' = (1-γ)s + a"
+elif transition_error < 1e-4:
+    trans_status = "✓ GOOD"
+    trans_msg = "Minor floating point differences only"
+else:
+    trans_status = "✗ ERROR"
+    trans_msg = f"Transition mismatch detected (max error: {transition_error:.2e})"
+
+print(f"   Max transition error: {transition_error:.2e}")
+print(f"   Status: {trans_status}")
+print(f"   {trans_msg}")
+
+# -----------------------------------------------------------------------------
+# 5. Reward Consistency Check
+# -----------------------------------------------------------------------------
+print("\n5. REWARD CONSISTENCY CHECK")
+print("-" * 40)
+
+# Verify rewards match model: r = β*log(1+s) - a
+states_flat = panel.states.flatten()
+actions_flat = panel.actions.flatten()
+rewards_flat = panel.rewards.flatten()
+
+expected_rewards = beta * np.log(1 + states_flat) - actions_flat
+reward_error = np.abs(rewards_flat - expected_rewards).max()
+
+if reward_error < 1e-6:
+    reward_status = "✓ EXACT"
+    reward_msg = "Rewards perfectly match r = β·log(1+s) - a"
+elif reward_error < 1e-4:
+    reward_status = "✓ GOOD"
+    reward_msg = "Minor floating point differences only"
+else:
+    reward_status = "✗ ERROR"
+    reward_msg = f"Reward mismatch detected (max error: {reward_error:.2e})"
+
+print(f"   Max reward error: {reward_error:.2e}")
+print(f"   Status: {reward_status}")
+print(f"   {reward_msg}")
+
+# -----------------------------------------------------------------------------
+# Overall Assessment
+# -----------------------------------------------------------------------------
+print("\n" + "=" * 60)
+print("OVERALL ASSESSMENT")
+print("=" * 60)
+
+all_checks = [
+    ("Choice Probability", rmse < 0.05),
+    ("Calibration", cal_rmse < 0.05),
+    ("Convergence", convergence_diff < 1.0),
+    ("Transitions", transition_error < 1e-4),
+    ("Rewards", reward_error < 1e-4),
+]
+
+passed = sum(1 for _, ok in all_checks if ok)
+total = len(all_checks)
+
+print(f"\nChecks Passed: {passed}/{total}")
+for name, ok in all_checks:
+    status = "✓" if ok else "✗"
+    print(f"   {status} {name}")
+
+if passed == total:
+    print(f"\n🎉 SIMULATION VALIDATED SUCCESSFULLY")
+    print(f"   The Monte Carlo simulation correctly implements the MDP model.")
+    print(f"   Simulated data can be used for structural estimation.")
+elif passed >= total - 1:
+    print(f"\n⚠️  SIMULATION MOSTLY VALIDATED")
+    print(f"   Minor issues detected - review warnings above.")
+else:
+    print(f"\n❌ SIMULATION REQUIRES ATTENTION")
+    print(f"   Multiple issues detected - review diagnostics above.")
+```
