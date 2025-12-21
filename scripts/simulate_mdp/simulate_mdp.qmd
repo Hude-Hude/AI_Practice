@@ -248,8 +248,18 @@ The simulation algorithm satisfies the following properties:
 # Simulation parameters
 n_agents = 100       # Number of agents (paths)
 n_periods = 100      # Number of time periods
-s_init = 5.0         # Initial state for all agents
 simulation_seed = 42 # Random seed
+
+# Randomize initial states: draw from Uniform[s_min, s_max]
+np.random.seed(simulation_seed)
+s_init = np.random.uniform(s_min, s_max, size=n_agents)
+
+print(f"Initial state distribution:")
+print(f"  Distribution: Uniform[{s_min}, {s_max}]")
+print(f"  Mean: {s_init.mean():.2f}")
+print(f"  Std:  {s_init.std():.2f}")
+print(f"  Min:  {s_init.min():.2f}")
+print(f"  Max:  {s_init.max():.2f}")
 
 # Run simulation using the implemented algorithm
 panel = simulate_mdp_panel(
@@ -257,16 +267,15 @@ panel = simulate_mdp_panel(
     v1_net=v1_net,
     n_agents=n_agents,
     n_periods=n_periods,
-    s_init=s_init,
+    s_init=s_init,  # Vector of different initial states per agent
     beta=beta,
     gamma=gamma,
     seed=simulation_seed,
 )
 
-print(f"Simulation complete:")
+print(f"\nSimulation complete:")
 print(f"  Agents: {panel.n_agents}")
 print(f"  Periods: {panel.n_periods}")
-print(f"  Initial state: {s_init}")
 print(f"  Total observations: {panel.n_agents * panel.n_periods:,}")
 ```
 
@@ -337,7 +346,7 @@ ax0.fill_between(
     color='blue',
     label='±1 std'
 )
-ax0.axhline(y=s_init, color='gray', linestyle='--', alpha=0.5, label=f'Initial: {s_init}')
+ax0.axhline(y=s_init.mean(), color='gray', linestyle='--', alpha=0.5, label=f'Initial mean: {s_init.mean():.1f}')
 ax0.set_xlabel('Period')
 ax0.set_ylabel('State')
 ax0.set_title('Mean State Over Time')
@@ -372,7 +381,7 @@ fig, ax = plt.subplots(figsize=(12, 5))
 for i in range(n_samples):
     ax.plot(periods, panel.states[i, :], alpha=0.6, linewidth=1)
 
-ax.axhline(y=s_init, color='black', linestyle='--', alpha=0.5, label=f'Initial: {s_init}')
+ax.axhline(y=s_init.mean(), color='black', linestyle='--', alpha=0.5, label=f'Initial mean: {s_init.mean():.1f}')
 ax.set_xlabel('Period')
 ax.set_ylabel('State')
 ax.set_title(f'Sample Trajectories ({n_samples} agents)')
@@ -505,49 +514,50 @@ plt.tight_layout()
 plt.show()
 ```
 
-### State Distribution (Pooled Over Time)
+### State Distribution (Initial vs Final)
 
 ```{python}
 #| label: plot-state-distribution
-#| fig-cap: "Distribution of states pooled across time (not final states)"
+#| fig-cap: "Distribution of states: initial (t=0) vs final (t=T-1)"
+
+final_states = panel.states[:, -1]
 
 fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
-# Left: Histogram of ALL states (all agents × all periods)
+# Left: Initial states distribution
 ax0 = axes[0]
-ax0.hist(state_flat, bins=30, density=True, alpha=0.7, color='steelblue', edgecolor='white')
-ax0.axvline(x=state_flat.mean(), color='red', linestyle='--', linewidth=2, label=f'Mean: {state_flat.mean():.2f}')
+ax0.hist(s_init, bins=20, density=True, alpha=0.7, color='steelblue', edgecolor='white')
+ax0.axvline(x=s_init.mean(), color='red', linestyle='--', linewidth=2, label=f'Mean: {s_init.mean():.2f}')
 ax0.set_xlabel('State s')
 ax0.set_ylabel('Density')
-ax0.set_title(f'All States Pooled\n({n_agents} agents × {n_periods} periods = {n_agents*n_periods} obs)')
+ax0.set_title(f'Initial States (t=0)\nUniform[{s_min}, {s_max}]')
 ax0.legend()
 ax0.grid(True, alpha=0.3)
 
-# Right: Histogram of late-period states (approximating stationary distribution)
+# Right: Final states distribution
 ax1 = axes[1]
-late_states_flat = panel.states[:, -20:].flatten()
-ax1.hist(late_states_flat, bins=20, density=True, alpha=0.7, color='darkgreen', edgecolor='white')
-ax1.axvline(x=late_states_flat.mean(), color='red', linestyle='--', linewidth=2, label=f'Mean: {late_states_flat.mean():.2f}')
+ax1.hist(final_states, bins=20, density=True, alpha=0.7, color='teal', edgecolor='white')
+ax1.axvline(x=final_states.mean(), color='red', linestyle='--', linewidth=2, label=f'Mean: {final_states.mean():.2f}')
 ax1.set_xlabel('State s')
 ax1.set_ylabel('Density')
-ax1.set_title(f'Late-Period States (t={n_periods-20} to t={n_periods-1})\n(Approx. Stationary Distribution)')
+ax1.set_title(f'Final States (t={n_periods-1})\n(Stationary Distribution)')
 ax1.legend()
 ax1.grid(True, alpha=0.3)
 
 plt.tight_layout()
 plt.show()
 
-print("Note: These are NOT final-period-only distributions.")
-print("      - Left: All observations pooled across agents and time")
-print("      - Right: Last 20 periods pooled (stationary approximation)")
-print("      - For final states, see 'Total Rewards Distribution' section below")
+print(f"Initial States (t=0):")
+print(f"  Mean: {s_init.mean():.2f}, Std: {s_init.std():.2f}")
+print(f"\nFinal States (t={n_periods-1}):")
+print(f"  Mean: {final_states.mean():.2f}, Std: {final_states.std():.2f}")
 ```
 
-### Total Rewards Distribution
+### Reward Distribution (Cumulative vs Discounted)
 
 ```{python}
-#| label: plot-total-rewards
-#| fig-cap: "Distribution of cumulative and discounted total rewards across agents"
+#| label: plot-reward-distribution
+#| fig-cap: "Distribution of total rewards: cumulative vs discounted"
 
 # Compute cumulative rewards (simple sum)
 cumulative_rewards = panel.rewards.sum(axis=1)  # Shape: (n_agents,)
@@ -555,21 +565,6 @@ cumulative_rewards = panel.rewards.sum(axis=1)  # Shape: (n_agents,)
 # Compute discounted rewards: sum_{t=0}^{T-1} delta^t * r_t
 discount_factors = delta ** np.arange(n_periods)  # [1, delta, delta^2, ..., delta^{T-1}]
 discounted_rewards = (panel.rewards * discount_factors).sum(axis=1)  # Shape: (n_agents,)
-
-print("Total Rewards Statistics:")
-print("\nCumulative (undiscounted) Rewards:")
-print(f"  Sum: Σ r_t")
-print(f"  Mean:   {cumulative_rewards.mean():.2f}")
-print(f"  Std:    {cumulative_rewards.std():.2f}")
-print(f"  Min:    {cumulative_rewards.min():.2f}")
-print(f"  Max:    {cumulative_rewards.max():.2f}")
-
-print(f"\nDiscounted Rewards (δ = {delta}):")
-print(f"  Sum: Σ δ^t r_t")
-print(f"  Mean:   {discounted_rewards.mean():.2f}")
-print(f"  Std:    {discounted_rewards.std():.2f}")
-print(f"  Min:    {discounted_rewards.min():.2f}")
-print(f"  Max:    {discounted_rewards.max():.2f}")
 
 fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
@@ -597,36 +592,11 @@ ax1.grid(True, alpha=0.3)
 
 plt.tight_layout()
 plt.show()
-```
 
-### Final States Distribution
-
-```{python}
-#| label: plot-final-states
-#| fig-cap: "Distribution of final states (last period only)"
-
-final_states = panel.states[:, -1]
-
-fig, ax = plt.subplots(figsize=(8, 5))
-ax.hist(final_states, bins=20, density=True, alpha=0.7, color='teal', edgecolor='white')
-ax.axvline(x=final_states.mean(), color='red', linestyle='--', linewidth=2,
-           label=f'Mean: {final_states.mean():.2f}')
-ax.axvline(x=np.median(final_states), color='orange', linestyle='--', linewidth=2,
-           label=f'Median: {np.median(final_states):.2f}')
-ax.set_xlabel('Final State')
-ax.set_ylabel('Density')
-ax.set_title(f'Distribution of Final States (t={n_periods-1})')
-ax.legend()
-ax.grid(True, alpha=0.3)
-
-plt.tight_layout()
-plt.show()
-
-print(f"Final States (t={n_periods-1}):")
-print(f"  Mean:   {final_states.mean():.2f}")
-print(f"  Std:    {final_states.std():.2f}")
-print(f"  Min:    {final_states.min():.2f}")
-print(f"  Max:    {final_states.max():.2f}")
+print(f"Cumulative Rewards (Σ rₜ):")
+print(f"  Mean: {cumulative_rewards.mean():.2f}, Std: {cumulative_rewards.std():.2f}")
+print(f"\nDiscounted Rewards (Σ δᵗrₜ, δ={delta}):")
+print(f"  Mean: {discounted_rewards.mean():.2f}, Std: {discounted_rewards.std():.2f}")
 ```
 
 ## Summary
@@ -646,7 +616,7 @@ print(f"  δ = {delta} (discount factor)")
 print(f"\nSimulation Setup:")
 print(f"  Agents: {panel.n_agents}")
 print(f"  Periods: {panel.n_periods}")
-print(f"  Initial state: {s_init}")
+print(f"  Initial states: Uniform[{s_min}, {s_max}], mean={s_init.mean():.1f}")
 print(f"  Random seed: {simulation_seed}")
 
 print(f"\nKey Results:")

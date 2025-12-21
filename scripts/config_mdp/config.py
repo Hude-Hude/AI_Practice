@@ -19,7 +19,7 @@ delta = 0.95
 
 # State space bounds
 s_min = 0.0
-s_max = 20.0
+s_max = 10.0
 
 # =============================================================================
 # Neural Network Architecture
