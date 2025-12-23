@@ -121,14 +121,14 @@ $$
 
 The system of FOCs can be written compactly as:
 $$
-s + (\Omega \odot \Delta)(p - c) = 0
+s - (\Omega \odot \Delta)(p - c) = 0
 $$
 
 where $\odot$ denotes element-wise (Hadamard) product.
 
 Solving for the equilibrium markup:
 $$
-p - c = -(\Omega \odot \Delta)^{-1} s
+p - c = (\Omega \odot \Delta)^{-1} s
 $$
 
 This is the **markup equation**: equilibrium prices equal marginal cost plus a markup that depends on:
@@ -208,12 +208,12 @@ $$
 
 The markup equation defines a fixed-point problem. Define the markup $\eta_j = p_j - c_j$. Given prices $p = c + \eta$, the equilibrium markup satisfies:
 $$
-\eta = -(\Omega \odot \Delta(c + \eta))^{-1} s(c + \eta)
+\eta = (\Omega \odot \Delta(c + \eta))^{-1} s(c + \eta)
 $$
 
 This suggests the **fixed-point iteration**:
 $$
-\eta^{(k+1)} = -(\Omega \odot \Delta(p^{(k)}))^{-1} s(p^{(k)})
+\eta^{(k+1)} = (\Omega \odot \Delta(p^{(k)}))^{-1} s(p^{(k)})
 $$
 where $p^{(k)} = c + \eta^{(k)}$.
 
@@ -221,7 +221,7 @@ where $p^{(k)} = c + \eta^{(k)}$.
 
 For stability, we use **damping** (convex combination of old and new):
 $$
-\eta^{(k+1)} = (1 - \lambda) \eta^{(k)} + \lambda \left[ -(\Omega \odot \Delta(p^{(k)}))^{-1} s(p^{(k)}) \right]
+\eta^{(k+1)} = (1 - \lambda) \eta^{(k)} + \lambda \left[ (\Omega \odot \Delta(p^{(k)}))^{-1} s(p^{(k)}) \right]
 $$
 where $\lambda \in (0, 1]$ is the damping factor. Smaller $\lambda$ improves stability at the cost of slower convergence.
 
@@ -354,8 +354,8 @@ OUTPUT:
   # Compute Ω ⊙ Δ (element-wise product)
   A : Matrix[J,J] ← Ω ⊙ Δ
   
-  # Solve linear system: A * η = -s
-  η : Vector[J] ← SOLVE_LINEAR_SYSTEM(A, -s)
+  # Solve linear system: A * η = s
+  η : Vector[J] ← SOLVE_LINEAR_SYSTEM(A, s)
   
   RETURN η
 ```

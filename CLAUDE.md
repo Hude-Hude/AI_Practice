@@ -9,6 +9,8 @@
 ```
 □ REPORT THE ISSUE BEFORE FIXING, EDITING, OR EXECUTING ANYTHING
 □ NO GIT without explicit "commit" request
+□ "commit" = commit only, NOT push
+□ "push" requires explicit request
 □ NO TIMESTAMPS (❌ file_20250101.py → ✅ file.py)
 □ NO VERSIONS (❌ file_v2.py, _old.py → ✅ file.py)
 □ NO BACKWARD COMPATIBILITY
