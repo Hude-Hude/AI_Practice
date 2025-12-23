@@ -1181,6 +1181,406 @@ print("• Low-quality outsider benefits: gains share as merged products become 
 print("• Consumers harmed: higher prices, some switch to outside option")
 ```
 
+### Scenario 3: Cost Differentiation Only
+
+```{python}
+#| label: cost-differentiation-setup
+#| fig-cap: "Scenario 3: Cost Differentiation (δ constant, c varies)"
+
+# Setup: Three products with same quality, different costs
+delta_cost = np.array([1.0, 1.0, 1.0])  # Same quality
+costs_cost = np.array([0.3, 0.5, 0.7])  # Low, Medium, High cost
+ownership_cost = np.eye(3)
+alpha_cost = 1.0
+
+# Solve equilibrium
+result_cost = solve_equilibrium_prices(
+    delta=delta_cost,
+    alpha=alpha_cost,
+    costs=costs_cost,
+    ownership=ownership_cost,
+)
+
+print("=" * 60)
+print("SCENARIO 3: COST DIFFERENTIATION")
+print("δ constant, c varies")
+print("=" * 60)
+print()
+print("Setup:")
+print(f"  Mean utilities (δ):  {delta_cost}  (identical quality)")
+print(f"  Marginal costs (c):  {costs_cost}  (Low, Med, High cost)")
+print(f"  Price sensitivity:   α = {alpha_cost}")
+print()
+print("Equilibrium Results:")
+print("-" * 60)
+print(f"{'Product':<15} {'Cost (c)':<12} {'Share':<12} {'Markup':<12} {'Price':<12}")
+print("-" * 60)
+labels_cost = ['Efficient', 'Average', 'Inefficient']
+for j in range(3):
+    print(f"{labels_cost[j]:<15} {costs_cost[j]:<12.2f} {result_cost.shares[j]:<12.4f} {result_cost.markups[j]:<12.4f} {result_cost.prices[j]:<12.4f}")
+print("-" * 60)
+```
+
+```{python}
+#| label: cost-differentiation-figure
+#| fig-cap: "Cost Differentiation: Lower Cost → Lower Price → Higher Share → Higher Markup"
+
+# Create visualization
+fig, axes = plt.subplots(1, 4, figsize=(16, 4))
+
+products_cost = ['Efficient\n(c=0.3)', 'Average\n(c=0.5)', 'Inefficient\n(c=0.7)']
+x = np.arange(len(products_cost))
+colors_cost = ['#27ae60', '#f39c12', '#e74c3c']  # Green, Yellow, Red
+
+# Panel A: Costs
+ax1 = axes[0]
+bars1 = ax1.bar(x, costs_cost, color=colors_cost, alpha=0.8, edgecolor='black')
+ax1.set_ylabel('Marginal Cost (c)')
+ax1.set_title('A. Production Costs')
+ax1.set_xticks(x)
+ax1.set_xticklabels(products_cost)
+ax1.set_ylim(0, 1.0)
+
+# Panel B: Prices
+ax2 = axes[1]
+bars2 = ax2.bar(x, result_cost.prices, color=colors_cost, alpha=0.8, edgecolor='black')
+ax2.set_ylabel('Price (p)')
+ax2.set_title('B. Equilibrium Prices')
+ax2.set_xticks(x)
+ax2.set_xticklabels(products_cost)
+
+# Panel C: Market Shares
+ax3 = axes[2]
+bars3 = ax3.bar(x, result_cost.shares, color=colors_cost, alpha=0.8, edgecolor='black')
+ax3.set_ylabel('Market Share (s)')
+ax3.set_title('C. Market Shares')
+ax3.set_xticks(x)
+ax3.set_xticklabels(products_cost)
+
+# Panel D: Markups
+ax4 = axes[3]
+bars4 = ax4.bar(x, result_cost.markups, color=colors_cost, alpha=0.8, edgecolor='black')
+ax4.set_ylabel('Markup (η = p - c)')
+ax4.set_title('D. Markups')
+ax4.set_xticks(x)
+ax4.set_xticklabels(products_cost)
+
+plt.tight_layout()
+plt.show()
+
+print("\nKey Insights:")
+print("• Lower cost → lower price → higher share → higher markup")
+print("• Efficient firm's advantage is PARTIALLY offset by higher markup")
+print("• Price differences are SMALLER than cost differences:")
+print(f"  Cost gap (Inefficient - Efficient): {costs_cost[2] - costs_cost[0]:.2f}")
+print(f"  Price gap (Inefficient - Efficient): {result_cost.prices[2] - result_cost.prices[0]:.4f}")
+print(f"  → Efficient firm captures some cost advantage as profit")
+```
+
+### Scenario 4: Vertical Differentiation
+
+```{python}
+#| label: vertical-differentiation-setup
+#| fig-cap: "Scenario 4: Vertical Differentiation (δ and c positively correlated)"
+
+# Setup: Higher quality costs more to produce
+delta_vert = np.array([0.5, 1.0, 2.0])  # Low, Medium, High quality
+costs_vert = np.array([0.3, 0.5, 0.8])  # Low, Medium, High cost (correlated)
+ownership_vert = np.eye(3)
+alpha_vert = 1.0
+
+# Solve equilibrium
+result_vert = solve_equilibrium_prices(
+    delta=delta_vert,
+    alpha=alpha_vert,
+    costs=costs_vert,
+    ownership=ownership_vert,
+)
+
+print("=" * 60)
+print("SCENARIO 4: VERTICAL DIFFERENTIATION")
+print("δ and c positively correlated (higher quality costs more)")
+print("=" * 60)
+print()
+print("Setup:")
+print(f"  Mean utilities (δ):  {delta_vert}  (quality gradient)")
+print(f"  Marginal costs (c):  {costs_vert}  (correlated with quality)")
+print(f"  Price sensitivity:   α = {alpha_vert}")
+print()
+print("Equilibrium Results:")
+print("-" * 70)
+print(f"{'Product':<12} {'Quality (δ)':<12} {'Cost (c)':<12} {'Share':<12} {'Markup':<12} {'Price':<12}")
+print("-" * 70)
+labels_vert = ['Economy', 'Standard', 'Premium']
+for j in range(3):
+    print(f"{labels_vert[j]:<12} {delta_vert[j]:<12.1f} {costs_vert[j]:<12.2f} {result_vert.shares[j]:<12.4f} {result_vert.markups[j]:<12.4f} {result_vert.prices[j]:<12.4f}")
+print("-" * 70)
+```
+
+```{python}
+#| label: vertical-differentiation-figure
+#| fig-cap: "Vertical Differentiation: Economy vs Standard vs Premium Products"
+
+# Create visualization comparing all three products
+fig, axes = plt.subplots(1, 4, figsize=(16, 4))
+
+products_vert = ['Economy\n(δ=0.5, c=0.3)', 'Standard\n(δ=1.0, c=0.5)', 'Premium\n(δ=2.0, c=0.8)']
+x = np.arange(len(products_vert))
+colors_vert = ['#3498db', '#9b59b6', '#e74c3c']
+
+# Panel A: Quality vs Cost
+ax1 = axes[0]
+width = 0.35
+bars1a = ax1.bar(x - width/2, delta_vert, width, label='Quality (δ)', color='steelblue', alpha=0.8)
+bars1b = ax1.bar(x + width/2, costs_vert, width, label='Cost (c)', color='coral', alpha=0.8)
+ax1.set_ylabel('Value')
+ax1.set_title('A. Quality vs Cost')
+ax1.set_xticks(x)
+ax1.set_xticklabels(['Economy', 'Standard', 'Premium'])
+ax1.legend()
+
+# Panel B: Market Shares
+ax2 = axes[1]
+bars2 = ax2.bar(x, result_vert.shares, color=colors_vert, alpha=0.8, edgecolor='black')
+ax2.set_ylabel('Market Share (s)')
+ax2.set_title('B. Market Shares')
+ax2.set_xticks(x)
+ax2.set_xticklabels(['Economy', 'Standard', 'Premium'])
+
+# Panel C: Markups
+ax3 = axes[2]
+bars3 = ax3.bar(x, result_vert.markups, color=colors_vert, alpha=0.8, edgecolor='black')
+ax3.set_ylabel('Markup (η)')
+ax3.set_title('C. Markups')
+ax3.set_xticks(x)
+ax3.set_xticklabels(['Economy', 'Standard', 'Premium'])
+
+# Panel D: Price Decomposition
+ax4 = axes[3]
+bars4a = ax4.bar(x, costs_vert, color='lightgray', alpha=0.8, edgecolor='black', label='Cost')
+bars4b = ax4.bar(x, result_vert.markups, bottom=costs_vert, color=colors_vert, alpha=0.8, edgecolor='black', label='Markup')
+ax4.set_ylabel('Price (p = c + η)')
+ax4.set_title('D. Price Decomposition')
+ax4.set_xticks(x)
+ax4.set_xticklabels(['Economy', 'Standard', 'Premium'])
+ax4.legend()
+
+plt.tight_layout()
+plt.show()
+
+# Analysis
+print("\nPrice Premium Analysis:")
+print("-" * 60)
+price_gap = result_vert.prices[2] - result_vert.prices[0]
+cost_gap = costs_vert[2] - costs_vert[0]
+markup_gap = result_vert.markups[2] - result_vert.markups[0]
+print(f"Premium vs Economy price gap:  {price_gap:.4f}")
+print(f"  Due to cost difference:      {cost_gap:.4f} ({100*cost_gap/price_gap:.1f}%)")
+print(f"  Due to markup difference:    {markup_gap:.4f} ({100*markup_gap/price_gap:.1f}%)")
+print()
+print("Key Insight: Price gap EXCEEDS cost gap because premium products")
+print("also have higher markups (due to higher market share → more market power)")
+```
+
+### Scenario 5: General Heterogeneous Products
+
+```{python}
+#| label: general-heterogeneous-setup
+#| fig-cap: "Scenario 5: General Heterogeneous Products (δ and c vary independently)"
+
+# Setup: Quality and cost vary independently
+# Product A: High quality, Low cost (Dominant)
+# Product B: Low quality, High cost (Weak)
+# Product C: Medium quality, Medium cost (Average)
+delta_gen = np.array([2.0, 0.5, 1.0])  # High, Low, Medium quality
+costs_gen = np.array([0.3, 0.7, 0.5])  # Low, High, Medium cost
+ownership_gen = np.eye(3)
+alpha_gen = 1.0
+
+# Solve equilibrium
+result_gen = solve_equilibrium_prices(
+    delta=delta_gen,
+    alpha=alpha_gen,
+    costs=costs_gen,
+    ownership=ownership_gen,
+)
+
+print("=" * 60)
+print("SCENARIO 5: GENERAL HETEROGENEOUS PRODUCTS")
+print("δ and c vary independently")
+print("=" * 60)
+print()
+print("Setup:")
+print(f"  Product A (Dominant): δ={delta_gen[0]}, c={costs_gen[0]} (high quality, low cost)")
+print(f"  Product B (Weak):     δ={delta_gen[1]}, c={costs_gen[1]} (low quality, high cost)")
+print(f"  Product C (Average):  δ={delta_gen[2]}, c={costs_gen[2]} (medium quality, medium cost)")
+print()
+print("Equilibrium Results:")
+print("-" * 80)
+print(f"{'Product':<12} {'Quality (δ)':<12} {'Cost (c)':<10} {'Share':<12} {'Markup':<12} {'Price':<10} {'Profit/unit':<12}")
+print("-" * 80)
+labels_gen = ['Dominant', 'Weak', 'Average']
+for j in range(3):
+    profit_per_unit = result_gen.markups[j]  # π/q = (p-c) = η
+    print(f"{labels_gen[j]:<12} {delta_gen[j]:<12.1f} {costs_gen[j]:<10.2f} {result_gen.shares[j]:<12.4f} {result_gen.markups[j]:<12.4f} {result_gen.prices[j]:<10.4f} {profit_per_unit:<12.4f}")
+print("-" * 80)
+```
+
+```{python}
+#| label: general-heterogeneous-figure
+#| fig-cap: "General Heterogeneous Products: Dominant vs Weak vs Average Positioning"
+
+# Create comprehensive visualization
+fig = plt.figure(figsize=(16, 8))
+
+# Top row: Product characteristics and outcomes
+ax1 = fig.add_subplot(2, 3, 1)
+ax2 = fig.add_subplot(2, 3, 2)
+ax3 = fig.add_subplot(2, 3, 3)
+
+# Bottom row: Scatter plots and profit analysis
+ax4 = fig.add_subplot(2, 3, 4)
+ax5 = fig.add_subplot(2, 3, 5)
+ax6 = fig.add_subplot(2, 3, 6)
+
+products_gen = ['Dominant\n(δ=2, c=0.3)', 'Weak\n(δ=0.5, c=0.7)', 'Average\n(δ=1, c=0.5)']
+x = np.arange(len(products_gen))
+colors_gen = ['#27ae60', '#e74c3c', '#3498db']  # Green, Red, Blue
+
+# Panel A: Quality and Cost comparison
+width = 0.35
+bars1a = ax1.bar(x - width/2, delta_gen, width, label='Quality (δ)', color='steelblue', alpha=0.8)
+bars1b = ax1.bar(x + width/2, costs_gen, width, label='Cost (c)', color='coral', alpha=0.8)
+ax1.set_ylabel('Value')
+ax1.set_title('A. Quality vs Cost')
+ax1.set_xticks(x)
+ax1.set_xticklabels(['Dominant', 'Weak', 'Average'])
+ax1.legend()
+
+# Panel B: Market Shares
+bars2 = ax2.bar(x, result_gen.shares, color=colors_gen, alpha=0.8, edgecolor='black')
+ax2.set_ylabel('Market Share (s)')
+ax2.set_title('B. Market Shares')
+ax2.set_xticks(x)
+ax2.set_xticklabels(['Dominant', 'Weak', 'Average'])
+ax2.set_ylim(0, 0.6)
+
+# Panel C: Prices
+bars3 = ax3.bar(x, result_gen.prices, color=colors_gen, alpha=0.8, edgecolor='black')
+ax3.axhline(y=np.mean(costs_gen), color='gray', linestyle=':', alpha=0.7, label='Avg cost')
+ax3.set_ylabel('Price (p)')
+ax3.set_title('C. Equilibrium Prices')
+ax3.set_xticks(x)
+ax3.set_xticklabels(['Dominant', 'Weak', 'Average'])
+ax3.legend()
+
+# Panel D: Quality-Share scatter
+ax4.scatter(delta_gen, result_gen.shares, s=200, c=colors_gen, alpha=0.8, edgecolors='black', linewidths=2)
+for j, label in enumerate(['Dominant', 'Weak', 'Average']):
+    ax4.annotate(label, (delta_gen[j], result_gen.shares[j]), textcoords="offset points", xytext=(0,10), ha='center')
+ax4.set_xlabel('Quality (δ)')
+ax4.set_ylabel('Market Share (s)')
+ax4.set_title('D. Quality vs Share')
+
+# Panel E: Share-Markup scatter
+ax5.scatter(result_gen.shares, result_gen.markups, s=200, c=colors_gen, alpha=0.8, edgecolors='black', linewidths=2)
+for j, label in enumerate(['Dominant', 'Weak', 'Average']):
+    ax5.annotate(label, (result_gen.shares[j], result_gen.markups[j]), textcoords="offset points", xytext=(0,10), ha='center')
+# Add theoretical line: η = 1/(α(1-s))
+s_line = np.linspace(0.05, 0.5, 50)
+eta_line = 1 / (alpha_gen * (1 - s_line))
+ax5.plot(s_line, eta_line, 'k--', alpha=0.5, label='η = 1/(α(1-s))')
+ax5.set_xlabel('Market Share (s)')
+ax5.set_ylabel('Markup (η)')
+ax5.set_title('E. Share vs Markup')
+ax5.legend()
+
+# Panel F: Profit analysis (share × markup)
+profit_share = result_gen.shares * result_gen.markups  # Proportional to profit
+bars6 = ax6.bar(x, profit_share, color=colors_gen, alpha=0.8, edgecolor='black')
+ax6.set_ylabel('Share × Markup (∝ Profit)')
+ax6.set_title('F. Relative Profitability')
+ax6.set_xticks(x)
+ax6.set_xticklabels(['Dominant', 'Weak', 'Average'])
+
+plt.tight_layout()
+plt.show()
+
+# Summary analysis
+print("\nProduct Positioning Analysis:")
+print("-" * 60)
+print(f"{'Product':<12} {'Position':<35} {'Profit Rank':<15}")
+print("-" * 60)
+profit_ranks = np.argsort(result_gen.shares * result_gen.markups)[::-1]
+positions = [
+    'High δ, Low c → Best of both worlds',
+    'Low δ, High c → Worst of both worlds',
+    'Med δ, Med c → Middle ground'
+]
+for rank, j in enumerate(profit_ranks):
+    print(f"{labels_gen[j]:<12} {positions[j]:<35} #{rank+1:<15}")
+
+print()
+print("Key Insights:")
+print("• Dominant product (high quality, low cost) captures largest share AND highest markup")
+print("• Weak product (low quality, high cost) struggles: low share, low markup")
+print("• Product positioning (δ, c) determines competitive success")
+print("• No simple ordering when quality and cost vary independently")
+```
+
+```{python}
+#| label: scenario-comparison
+#| fig-cap: "Summary: Comparing All Differentiation Scenarios"
+
+# Compare equilibrium outcomes across scenarios
+print("=" * 80)
+print("SUMMARY: COMPARING ALL DIFFERENTIATION SCENARIOS")
+print("=" * 80)
+print()
+
+# Collect results
+scenarios = {
+    'Symmetric (Baseline)': {
+        'delta': delta, 'costs': costs,
+        'result': result
+    },
+    'Quality Only (Sc.2)': {
+        'delta': delta_quality, 'costs': costs_quality,
+        'result': result_quality
+    },
+    'Cost Only (Sc.3)': {
+        'delta': delta_cost, 'costs': costs_cost,
+        'result': result_cost
+    },
+    'Vertical (Sc.4)': {
+        'delta': delta_vert, 'costs': costs_vert,
+        'result': result_vert
+    },
+    'General (Sc.5)': {
+        'delta': delta_gen, 'costs': costs_gen,
+        'result': result_gen
+    },
+}
+
+print(f"{'Scenario':<25} {'δ range':<15} {'c range':<15} {'Price range':<15} {'Share range':<15} {'HHI':<10}")
+print("-" * 95)
+for name, data in scenarios.items():
+    d_range = f"[{min(data['delta']):.1f}, {max(data['delta']):.1f}]"
+    c_range = f"[{min(data['costs']):.1f}, {max(data['costs']):.1f}]"
+    p_range = f"[{min(data['result'].prices):.2f}, {max(data['result'].prices):.2f}]"
+    s_range = f"[{min(data['result'].shares):.3f}, {max(data['result'].shares):.3f}]"
+    hhi = np.sum(data['result'].shares**2) * 10000
+    print(f"{name:<25} {d_range:<15} {c_range:<15} {p_range:<15} {s_range:<15} {hhi:<10.0f}")
+
+print()
+print("Observations:")
+print("• Symmetric: All products identical → equal prices, shares, markups")
+print("• Quality Only: Price dispersion driven by markup differences")
+print("• Cost Only: Price dispersion driven by cost differences")
+print("• Vertical: Price dispersion from both cost AND markup differences")
+print("• General: Complex interactions; dominant positioning wins")
+```
+
 ## Conclusion
 
 ```{python}
