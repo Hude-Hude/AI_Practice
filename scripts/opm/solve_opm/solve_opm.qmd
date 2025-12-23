@@ -880,6 +880,307 @@ print("• Outsider product also raises price → strategic complement effect")
 print("• Consumers shift to outside option → higher prices reduce total demand")
 ```
 
+### Scenario 2: Quality Differentiation Only
+
+```{python}
+#| label: quality-differentiation-setup
+#| fig-cap: "Scenario 2: Quality Differentiation (δ varies, c constant)"
+
+# Setup: Three products with different quality levels, same cost
+delta_quality = np.array([0.5, 1.0, 2.0])  # Low, Medium, High quality
+costs_quality = np.array([0.5, 0.5, 0.5])  # Same marginal cost
+ownership_quality = np.eye(3)  # Single-product firms
+alpha_quality = 1.0
+
+# Solve equilibrium
+result_quality = solve_equilibrium_prices(
+    delta=delta_quality,
+    alpha=alpha_quality,
+    costs=costs_quality,
+    ownership=ownership_quality,
+)
+
+print("=" * 60)
+print("SCENARIO 2: QUALITY DIFFERENTIATION")
+print("δ varies, c constant")
+print("=" * 60)
+print()
+print("Setup:")
+print(f"  Mean utilities (δ):  {delta_quality}  (Low, Med, High quality)")
+print(f"  Marginal costs (c):  {costs_quality}  (identical)")
+print(f"  Price sensitivity:   α = {alpha_quality}")
+print()
+print("Equilibrium Results:")
+print("-" * 60)
+print(f"{'Product':<12} {'Quality (δ)':<12} {'Share':<12} {'Markup':<12} {'Price':<12}")
+print("-" * 60)
+labels = ['Low', 'Medium', 'High']
+for j in range(3):
+    print(f"{labels[j]:<12} {delta_quality[j]:<12.1f} {result_quality.shares[j]:<12.4f} {result_quality.markups[j]:<12.4f} {result_quality.prices[j]:<12.4f}")
+print("-" * 60)
+print(f"{'Outside':<12} {'':<12} {1-np.sum(result_quality.shares):<12.4f}")
+```
+
+```{python}
+#| label: quality-differentiation-figure
+#| fig-cap: "Quality Differentiation: Higher Quality → Higher Share → Higher Markup → Higher Price"
+
+# Create visualization
+fig, axes = plt.subplots(1, 4, figsize=(16, 4))
+
+products = ['Low\n(δ=0.5)', 'Medium\n(δ=1.0)', 'High\n(δ=2.0)']
+x = np.arange(len(products))
+colors = ['#3498db', '#2ecc71', '#e74c3c']
+
+# Panel A: Quality (δ)
+ax1 = axes[0]
+bars1 = ax1.bar(x, delta_quality, color=colors, alpha=0.8, edgecolor='black')
+ax1.set_ylabel('Mean Utility (δ)')
+ax1.set_title('A. Product Quality')
+ax1.set_xticks(x)
+ax1.set_xticklabels(products)
+ax1.set_ylim(0, 2.5)
+
+# Panel B: Market Shares
+ax2 = axes[1]
+bars2 = ax2.bar(x, result_quality.shares, color=colors, alpha=0.8, edgecolor='black')
+ax2.set_ylabel('Market Share (s)')
+ax2.set_title('B. Market Shares')
+ax2.set_xticks(x)
+ax2.set_xticklabels(products)
+ax2.set_ylim(0, 0.6)
+# Add outside option
+ax2.axhline(y=1-np.sum(result_quality.shares), color='gray', linestyle='--', alpha=0.7)
+ax2.text(2.5, 1-np.sum(result_quality.shares), f'Outside: {1-np.sum(result_quality.shares):.2f}', fontsize=9)
+
+# Panel C: Markups
+ax3 = axes[2]
+bars3 = ax3.bar(x, result_quality.markups, color=colors, alpha=0.8, edgecolor='black')
+ax3.set_ylabel('Markup (η = p - c)')
+ax3.set_title('C. Markups')
+ax3.set_xticks(x)
+ax3.set_xticklabels(products)
+ax3.set_ylim(0, 2.5)
+
+# Panel D: Prices
+ax4 = axes[3]
+bars4 = ax4.bar(x, result_quality.prices, color=colors, alpha=0.8, edgecolor='black')
+ax4.axhline(y=costs_quality[0], color='gray', linestyle=':', linewidth=2, label=f'Cost (c={costs_quality[0]})')
+ax4.set_ylabel('Price (p)')
+ax4.set_title('D. Equilibrium Prices')
+ax4.set_xticks(x)
+ax4.set_xticklabels(products)
+ax4.set_ylim(0, 3.0)
+ax4.legend(loc='upper left')
+
+plt.tight_layout()
+plt.show()
+
+# Verify analytical prediction
+print("\nVerification against analytical benchmark:")
+print("-" * 60)
+print(f"{'Product':<12} {'η computed':<15} {'η = 1/(α(1-s))':<15} {'Match':<10}")
+print("-" * 60)
+for j in range(3):
+    expected = 1 / (alpha_quality * (1 - result_quality.shares[j]))
+    match = np.isclose(result_quality.markups[j], expected, rtol=1e-6)
+    print(f"{labels[j]:<12} {result_quality.markups[j]:<15.6f} {expected:<15.6f} {'✓' if match else '✗':<10}")
+```
+
+```{python}
+#| label: quality-gradient-analysis
+#| fig-cap: "Effect of Quality Gap on Market Outcomes"
+
+# Analyze how increasing quality gap affects equilibrium
+quality_gaps = np.linspace(0, 2.0, 20)  # Gap between high and low quality
+results_gap = []
+
+for gap in quality_gaps:
+    # δ = [1-gap/2, 1, 1+gap/2] so mean is always 1
+    delta_test = np.array([1.0 - gap/2, 1.0, 1.0 + gap/2])
+    res = solve_equilibrium_prices(
+        delta=delta_test, alpha=1.0, costs=np.ones(3)*0.5, ownership=np.eye(3)
+    )
+    results_gap.append({
+        'gap': gap,
+        'share_low': res.shares[0],
+        'share_med': res.shares[1],
+        'share_high': res.shares[2],
+        'markup_low': res.markups[0],
+        'markup_med': res.markups[1],
+        'markup_high': res.markups[2],
+        'price_low': res.prices[0],
+        'price_high': res.prices[2],
+        'hhi': np.sum(res.shares**2) * 10000,
+    })
+
+# Convert to arrays
+gaps = np.array([r['gap'] for r in results_gap])
+share_low = np.array([r['share_low'] for r in results_gap])
+share_high = np.array([r['share_high'] for r in results_gap])
+markup_low = np.array([r['markup_low'] for r in results_gap])
+markup_high = np.array([r['markup_high'] for r in results_gap])
+price_low = np.array([r['price_low'] for r in results_gap])
+price_high = np.array([r['price_high'] for r in results_gap])
+hhi = np.array([r['hhi'] for r in results_gap])
+
+# Create figure
+fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+
+# Panel A: Shares vs Quality Gap
+ax1 = axes[0, 0]
+ax1.plot(gaps, share_low, 'b-', linewidth=2, label='Low quality')
+ax1.plot(gaps, share_high, 'r-', linewidth=2, label='High quality')
+ax1.fill_between(gaps, share_low, share_high, alpha=0.2, color='gray')
+ax1.set_xlabel('Quality Gap (δ_high - δ_low)')
+ax1.set_ylabel('Market Share')
+ax1.set_title('A. Market Shares vs Quality Gap')
+ax1.legend()
+ax1.set_xlim(0, 2)
+ax1.set_ylim(0, 0.5)
+
+# Panel B: Markups vs Quality Gap
+ax2 = axes[0, 1]
+ax2.plot(gaps, markup_low, 'b-', linewidth=2, label='Low quality')
+ax2.plot(gaps, markup_high, 'r-', linewidth=2, label='High quality')
+ax2.set_xlabel('Quality Gap (δ_high - δ_low)')
+ax2.set_ylabel('Markup (η)')
+ax2.set_title('B. Markups vs Quality Gap')
+ax2.legend()
+ax2.set_xlim(0, 2)
+
+# Panel C: Prices vs Quality Gap
+ax3 = axes[1, 0]
+ax3.plot(gaps, price_low, 'b-', linewidth=2, label='Low quality price')
+ax3.plot(gaps, price_high, 'r-', linewidth=2, label='High quality price')
+ax3.axhline(y=0.5, color='gray', linestyle=':', alpha=0.7, label='Marginal cost')
+ax3.set_xlabel('Quality Gap (δ_high - δ_low)')
+ax3.set_ylabel('Price')
+ax3.set_title('C. Prices vs Quality Gap')
+ax3.legend()
+ax3.set_xlim(0, 2)
+
+# Panel D: HHI (Concentration) vs Quality Gap
+ax4 = axes[1, 1]
+ax4.plot(gaps, hhi, 'purple', linewidth=2)
+ax4.axhline(y=10000/3, color='gray', linestyle='--', alpha=0.7, label='Symmetric HHI')
+ax4.set_xlabel('Quality Gap (δ_high - δ_low)')
+ax4.set_ylabel('HHI')
+ax4.set_title('D. Market Concentration vs Quality Gap')
+ax4.legend()
+ax4.set_xlim(0, 2)
+
+plt.tight_layout()
+plt.show()
+
+print("\nKey Insights:")
+print("• As quality gap increases, high-quality product gains share at expense of low-quality")
+print("• Markup gap widens: high-quality firms gain market power, low-quality firms lose it")
+print("• Price gap exceeds quality gap: high-quality charges premium beyond quality difference")
+print("• Market becomes more concentrated (higher HHI) with larger quality differences")
+```
+
+```{python}
+#| label: quality-merger-analysis
+#| fig-cap: "Merger Analysis in Quality-Differentiated Market"
+
+# Asymmetric merger: High-quality (product 2) acquires Medium-quality (product 1)
+print("=" * 60)
+print("ASYMMETRIC MERGER IN QUALITY-DIFFERENTIATED MARKET")
+print("High-quality firm acquires Medium-quality product")
+print("=" * 60)
+
+# Pre-merger
+ownership_pre_q = np.eye(3)
+result_pre_q = solve_equilibrium_prices(
+    delta=delta_quality, alpha=alpha_quality, costs=costs_quality, ownership=ownership_pre_q
+)
+
+# Post-merger: Products 1 and 2 merge (Medium + High quality)
+ownership_post_q = np.array([
+    [1, 0, 0],
+    [0, 1, 1],
+    [0, 1, 1],
+], dtype=float)
+result_post_q = solve_equilibrium_prices(
+    delta=delta_quality, alpha=alpha_quality, costs=costs_quality, ownership=ownership_post_q, damping=0.5
+)
+
+# Create comparison figure
+fig, axes = plt.subplots(1, 3, figsize=(14, 5))
+
+products_q = ['Low\n(δ=0.5)', 'Medium\n(δ=1.0)\n[Acquired]', 'High\n(δ=2.0)\n[Acquirer]']
+x = np.arange(len(products_q))
+width = 0.35
+
+# Panel A: Prices
+ax1 = axes[0]
+bars1 = ax1.bar(x - width/2, result_pre_q.prices, width, label='Pre-Merger', color=['#3498db', '#2ecc71', '#e74c3c'], alpha=0.6, edgecolor='black')
+bars2 = ax1.bar(x + width/2, result_post_q.prices, width, label='Post-Merger', color=['#3498db', '#27ae60', '#c0392b'], alpha=0.9, edgecolor='black')
+ax1.axhline(y=costs_quality[0], color='gray', linestyle=':', linewidth=2)
+ax1.set_ylabel('Price')
+ax1.set_title('A. Prices')
+ax1.set_xticks(x)
+ax1.set_xticklabels(products_q)
+ax1.legend(loc='upper left')
+
+# Add annotations
+for i, (pre, post) in enumerate(zip(result_pre_q.prices, result_post_q.prices)):
+    change = post - pre
+    ax1.annotate(f'{change:+.3f}', xy=(i + width/2, post + 0.05), ha='center', fontsize=9, 
+                 color='red' if change > 0 else 'green', fontweight='bold')
+
+# Panel B: Markups
+ax2 = axes[1]
+bars3 = ax2.bar(x - width/2, result_pre_q.markups, width, label='Pre-Merger', color=['#3498db', '#2ecc71', '#e74c3c'], alpha=0.6, edgecolor='black')
+bars4 = ax2.bar(x + width/2, result_post_q.markups, width, label='Post-Merger', color=['#3498db', '#27ae60', '#c0392b'], alpha=0.9, edgecolor='black')
+ax2.set_ylabel('Markup (η)')
+ax2.set_title('B. Markups')
+ax2.set_xticks(x)
+ax2.set_xticklabels(products_q)
+ax2.legend(loc='upper left')
+
+for i, (pre, post) in enumerate(zip(result_pre_q.markups, result_post_q.markups)):
+    change = post - pre
+    ax2.annotate(f'{change:+.3f}', xy=(i + width/2, post + 0.05), ha='center', fontsize=9,
+                 color='red' if change > 0 else 'green', fontweight='bold')
+
+# Panel C: Market Shares
+ax3 = axes[2]
+bars5 = ax3.bar(x - width/2, result_pre_q.shares, width, label='Pre-Merger', color=['#3498db', '#2ecc71', '#e74c3c'], alpha=0.6, edgecolor='black')
+bars6 = ax3.bar(x + width/2, result_post_q.shares, width, label='Post-Merger', color=['#3498db', '#27ae60', '#c0392b'], alpha=0.9, edgecolor='black')
+ax3.set_ylabel('Market Share')
+ax3.set_title('C. Market Shares')
+ax3.set_xticks(x)
+ax3.set_xticklabels(products_q)
+ax3.legend(loc='upper right')
+
+for i, (pre, post) in enumerate(zip(result_pre_q.shares, result_post_q.shares)):
+    change = post - pre
+    ax3.annotate(f'{change:+.3f}', xy=(i + width/2, post + 0.01), ha='center', fontsize=9,
+                 color='red' if change > 0 else 'green', fontweight='bold')
+
+plt.tight_layout()
+plt.show()
+
+# Summary
+print("\nMerger Impact Summary:")
+print("-" * 60)
+print(f"{'Metric':<30} {'Pre-Merger':<12} {'Post-Merger':<12} {'Change':<12}")
+print("-" * 60)
+print(f"{'Price (Low quality)':<30} {result_pre_q.prices[0]:<12.4f} {result_post_q.prices[0]:<12.4f} {result_post_q.prices[0] - result_pre_q.prices[0]:+.4f}")
+print(f"{'Price (Medium - acquired)':<30} {result_pre_q.prices[1]:<12.4f} {result_post_q.prices[1]:<12.4f} {result_post_q.prices[1] - result_pre_q.prices[1]:+.4f}")
+print(f"{'Price (High - acquirer)':<30} {result_pre_q.prices[2]:<12.4f} {result_post_q.prices[2]:<12.4f} {result_post_q.prices[2] - result_pre_q.prices[2]:+.4f}")
+print(f"{'Combined share (merged)':<30} {result_pre_q.shares[1]+result_pre_q.shares[2]:<12.4f} {result_post_q.shares[1]+result_post_q.shares[2]:<12.4f} {(result_post_q.shares[1]+result_post_q.shares[2]) - (result_pre_q.shares[1]+result_pre_q.shares[2]):+.4f}")
+print(f"{'Share (Low - outsider)':<30} {result_pre_q.shares[0]:<12.4f} {result_post_q.shares[0]:<12.4f} {result_post_q.shares[0] - result_pre_q.shares[0]:+.4f}")
+print()
+print("Interpretation:")
+print("• Merged products (Medium + High) both raise prices")
+print("• High-quality product raises price MORE (internalizes stealing from Medium)")
+print("• Low-quality outsider benefits: gains share as merged products become expensive")
+print("• Consumers harmed: higher prices, some switch to outside option")
+```
+
 ## Conclusion
 
 ```{python}
