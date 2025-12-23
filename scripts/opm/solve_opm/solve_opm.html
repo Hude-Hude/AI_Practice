@@ -126,7 +126,24 @@ window.Quarto = {
   <li><a href="#matrix-formulation" id="toc-matrix-formulation" class="nav-link" data-scroll-target="#matrix-formulation">Matrix Formulation</a></li>
   <li><a href="#markup-equation" id="toc-markup-equation" class="nav-link" data-scroll-target="#markup-equation">Markup Equation</a></li>
   </ul></li>
-  <li><a href="#solution-method" id="toc-solution-method" class="nav-link" data-scroll-target="#solution-method">Solution Method</a></li>
+  <li><a href="#analytical-benchmarks" id="toc-analytical-benchmarks" class="nav-link" data-scroll-target="#analytical-benchmarks">Analytical Benchmarks</a>
+  <ul class="collapse">
+  <li><a href="#single-product-firms" id="toc-single-product-firms" class="nav-link" data-scroll-target="#single-product-firms">Single-Product Firms</a></li>
+  <li><a href="#symmetric-equilibrium" id="toc-symmetric-equilibrium" class="nav-link" data-scroll-target="#symmetric-equilibrium">Symmetric Equilibrium</a></li>
+  <li><a href="#comparative-statics" id="toc-comparative-statics" class="nav-link" data-scroll-target="#comparative-statics">Comparative Statics</a></li>
+  <li><a href="#cost-pass-through" id="toc-cost-pass-through" class="nav-link" data-scroll-target="#cost-pass-through">Cost Pass-Through</a></li>
+  </ul></li>
+  <li><a href="#solution-method" id="toc-solution-method" class="nav-link" data-scroll-target="#solution-method">Solution Method</a>
+  <ul class="collapse">
+  <li><a href="#fixed-point-iteration-on-markups" id="toc-fixed-point-iteration-on-markups" class="nav-link" data-scroll-target="#fixed-point-iteration-on-markups">Fixed-Point Iteration on Markups</a></li>
+  <li><a href="#damped-iteration" id="toc-damped-iteration" class="nav-link" data-scroll-target="#damped-iteration">Damped Iteration</a></li>
+  <li><a href="#convergence-criterion" id="toc-convergence-criterion" class="nav-link" data-scroll-target="#convergence-criterion">Convergence Criterion</a></li>
+  <li><a href="#type-definitions" id="toc-type-definitions" class="nav-link" data-scroll-target="#type-definitions">Type Definitions</a></li>
+  <li><a href="#algorithm" id="toc-algorithm" class="nav-link" data-scroll-target="#algorithm">Algorithm</a></li>
+  <li><a href="#subroutines" id="toc-subroutines" class="nav-link" data-scroll-target="#subroutines">Subroutines</a></li>
+  <li><a href="#convergence-properties" id="toc-convergence-properties" class="nav-link" data-scroll-target="#convergence-properties">Convergence Properties</a></li>
+  <li><a href="#verification-plan" id="toc-verification-plan" class="nav-link" data-scroll-target="#verification-plan">Verification Plan</a></li>
+  </ul></li>
   <li><a href="#implementation" id="toc-implementation" class="nav-link" data-scroll-target="#implementation">Implementation</a>
   <ul class="collapse">
   <li><a href="#setup" id="toc-setup" class="nav-link" data-scroll-target="#setup">Setup</a></li>
@@ -134,7 +151,7 @@ window.Quarto = {
   <li><a href="#solve-equilibrium" id="toc-solve-equilibrium" class="nav-link" data-scroll-target="#solve-equilibrium">Solve Equilibrium</a></li>
   </ul></li>
   <li><a href="#results" id="toc-results" class="nav-link" data-scroll-target="#results">Results</a></li>
-  <li><a href="#comparative-statics" id="toc-comparative-statics" class="nav-link" data-scroll-target="#comparative-statics">Comparative Statics</a></li>
+  <li><a href="#comparative-statics-1" id="toc-comparative-statics-1" class="nav-link" data-scroll-target="#comparative-statics-1">Comparative Statics</a></li>
   <li><a href="#conclusion" id="toc-conclusion" class="nav-link" data-scroll-target="#conclusion">Conclusion</a></li>
   </ul>
 </nav>
@@ -224,7 +241,7 @@ s_0(p) = \frac{1}{1 + \sum_{k=1}^{J} \exp(\delta_k - \alpha p_k)}
 <section id="bertrand-nash-equilibrium" class="level3">
 <h3 class="anchored" data-anchor-id="bertrand-nash-equilibrium">Bertrand-Nash Equilibrium</h3>
 <p>In a Bertrand-Nash equilibrium, each firm <span class="math inline">\(f\)</span> chooses prices for its products to maximize profit, taking rivals’ prices as given: <span class="math display">\[
-\max_{\{p_j\}_{j \in \mathcal{J}_f}} \sum_{j \in \mathcal{J}_f} (p_j - c_j) \cdot M \cdot s_j(p)
+\max_{\{p_j\}_{j \in \mathcal{J}_f}} \sum_{j \in \mathcal{J}_f} (p_j - c_j) \cdot s_j(p)
 \]</span></p>
 </section>
 <section id="first-order-conditions" class="level3">
@@ -274,25 +291,282 @@ p - c = -(\Omega \odot \Delta)^{-1} s
 </ol>
 </section>
 </section>
+<section id="analytical-benchmarks" class="level2">
+<h2 class="anchored" data-anchor-id="analytical-benchmarks">Analytical Benchmarks</h2>
+<section id="single-product-firms" class="level3">
+<h3 class="anchored" data-anchor-id="single-product-firms">Single-Product Firms</h3>
+<p>When each firm owns exactly one product (<span class="math inline">\(\Omega = I\)</span>), the FOC for product <span class="math inline">\(j\)</span> simplifies to: <span class="math display">\[
+s_j - \alpha s_j (1 - s_j) \eta_j = 0
+\]</span></p>
+<p>Solving for the markup: <span class="math display">\[
+\eta_j = \frac{1}{\alpha (1 - s_j)}
+\]</span></p>
+<p><strong>Interpretation</strong>: Markup is inversely proportional to:</p>
+<ul>
+<li>Price sensitivity <span class="math inline">\(\alpha\)</span></li>
+<li>“Competitive pressure” <span class="math inline">\((1 - s_j)\)</span> = probability of losing customer to other products</li>
+</ul>
+</section>
+<section id="symmetric-equilibrium" class="level3">
+<h3 class="anchored" data-anchor-id="symmetric-equilibrium">Symmetric Equilibrium</h3>
+<p>For identical products (<span class="math inline">\(\delta_j = \delta\)</span>, <span class="math inline">\(c_j = c\)</span> for all <span class="math inline">\(j\)</span>) with single-product firms, the symmetric equilibrium has <span class="math inline">\(s_j = s\)</span> for all <span class="math inline">\(j\)</span>: <span class="math display">\[
+s = \frac{\exp(\delta - \alpha p)}{1 + J \exp(\delta - \alpha p)}
+\]</span></p>
+<p>With markup <span class="math inline">\(\eta = \frac{1}{\alpha(1-s)}\)</span>.</p>
+<p>As <span class="math inline">\(J \to \infty\)</span>: <span class="math inline">\(s \to 0\)</span>, so <span class="math inline">\(\eta \to \frac{1}{\alpha}\)</span> (competitive limit).</p>
+</section>
+<section id="comparative-statics" class="level3">
+<h3 class="anchored" data-anchor-id="comparative-statics">Comparative Statics</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 14%">
+<col style="width: 10%">
+<col style="width: 32%">
+<col style="width: 27%">
+<col style="width: 14%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Parameter</th>
+<th>Change</th>
+<th>Effect on Markup <span class="math inline">\(\eta\)</span></th>
+<th>Effect on Price <span class="math inline">\(p\)</span></th>
+<th>Intuition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><span class="math inline">\(\alpha\)</span> ↑</td>
+<td>More price sensitive</td>
+<td><span class="math inline">\(\eta\)</span> ↓</td>
+<td><span class="math inline">\(p\)</span> ↓</td>
+<td>Elastic demand → less market power</td>
+</tr>
+<tr class="even">
+<td><span class="math inline">\(\delta_j\)</span> ↑</td>
+<td>Higher quality</td>
+<td><span class="math inline">\(\eta_j\)</span> ↑</td>
+<td><span class="math inline">\(p_j\)</span> ↑</td>
+<td>Higher <span class="math inline">\(s_j\)</span> → more inelastic residual demand</td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">\(c_j\)</span> ↑</td>
+<td>Higher cost</td>
+<td>—</td>
+<td><span class="math inline">\(p_j\)</span> ↑</td>
+<td>Cost pass-through</td>
+</tr>
+<tr class="even">
+<td><span class="math inline">\(J\)</span> ↑</td>
+<td>More competitors</td>
+<td><span class="math inline">\(\eta\)</span> ↓</td>
+<td><span class="math inline">\(p\)</span> ↓</td>
+<td>Lower shares → more competition</td>
+</tr>
+<tr class="odd">
+<td>Merger</td>
+<td><span class="math inline">\(\Omega_{jk}: 0 \to 1\)</span></td>
+<td><span class="math inline">\(\eta_j, \eta_k\)</span> ↑</td>
+<td><span class="math inline">\(p_j, p_k\)</span> ↑</td>
+<td>Internalize cannibalization</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="cost-pass-through" class="level3">
+<h3 class="anchored" data-anchor-id="cost-pass-through">Cost Pass-Through</h3>
+<p>For single-product firms with logit demand, the pass-through rate measures how much of a cost increase is passed to consumers: <span class="math display">\[
+\rho_j = \frac{\partial p_j}{\partial c_j}
+\]</span></p>
+<p>Differentiating the equilibrium condition yields: <span class="math display">\[
+\rho_j = \frac{1}{1 + \alpha s_j \eta_j}
+\]</span></p>
+<p>Substituting <span class="math inline">\(\eta_j = \frac{1}{\alpha(1-s_j)}\)</span>: <span class="math display">\[
+\rho_j = \frac{1}{1 + \frac{s_j}{1-s_j}} = 1 - s_j
+\]</span></p>
+<p><strong>Result</strong>: Pass-through <span class="math inline">\(\rho_j = 1 - s_j &lt; 1\)</span>.</p>
+<p><strong>Interpretation</strong>:</p>
+<ul>
+<li>Firms with <strong>higher market share</strong> absorb more of cost increases (<span class="math inline">\(\rho_j\)</span> lower)</li>
+<li>Firms with <strong>lower market share</strong> pass through more to consumers (<span class="math inline">\(\rho_j\)</span> closer to 1)</li>
+<li>In the competitive limit (<span class="math inline">\(s_j \to 0\)</span>): <span class="math inline">\(\rho_j \to 1\)</span> (full pass-through)</li>
+</ul>
+</section>
+</section>
 <section id="solution-method" class="level2">
 <h2 class="anchored" data-anchor-id="solution-method">Solution Method</h2>
-<p><em>(To be filled: algorithm description, pseudocode)</em></p>
+<section id="fixed-point-iteration-on-markups" class="level3">
+<h3 class="anchored" data-anchor-id="fixed-point-iteration-on-markups">Fixed-Point Iteration on Markups</h3>
+<p>The markup equation defines a fixed-point problem. Define the markup <span class="math inline">\(\eta_j = p_j - c_j\)</span>. Given prices <span class="math inline">\(p = c + \eta\)</span>, the equilibrium markup satisfies: <span class="math display">\[
+\eta = -(\Omega \odot \Delta(c + \eta))^{-1} s(c + \eta)
+\]</span></p>
+<p>This suggests the <strong>fixed-point iteration</strong>: <span class="math display">\[
+\eta^{(k+1)} = -(\Omega \odot \Delta(p^{(k)}))^{-1} s(p^{(k)})
+\]</span> where <span class="math inline">\(p^{(k)} = c + \eta^{(k)}\)</span>.</p>
+</section>
+<section id="damped-iteration" class="level3">
+<h3 class="anchored" data-anchor-id="damped-iteration">Damped Iteration</h3>
+<p>For stability, we use <strong>damping</strong> (convex combination of old and new): <span class="math display">\[
+\eta^{(k+1)} = (1 - \lambda) \eta^{(k)} + \lambda \left[ -(\Omega \odot \Delta(p^{(k)}))^{-1} s(p^{(k)}) \right]
+\]</span> where <span class="math inline">\(\lambda \in (0, 1]\)</span> is the damping factor. Smaller <span class="math inline">\(\lambda\)</span> improves stability at the cost of slower convergence.</p>
+</section>
+<section id="convergence-criterion" class="level3">
+<h3 class="anchored" data-anchor-id="convergence-criterion">Convergence Criterion</h3>
+<p>Iterate until the markup change is small: <span class="math display">\[
+\| \eta^{(k+1)} - \eta^{(k)} \|_\infty &lt; \varepsilon
+\]</span></p>
+</section>
+<section id="type-definitions" class="level3">
+<h3 class="anchored" data-anchor-id="type-definitions">Type Definitions</h3>
+<pre><code>TYPE DEFINITIONS
+────────────────
+Scalar      = Float                      # Single real number
+Vector[J]   = Array[Float, J]            # 1D array of J floats
+Matrix[J,J] = Array[Float, J, J]         # 2D array of shape (J, J)</code></pre>
+</section>
+<section id="algorithm" class="level3">
+<h3 class="anchored" data-anchor-id="algorithm">Algorithm</h3>
+<pre><code>ALGORITHM: SOLVE_EQUILIBRIUM_PRICES
+───────────────────────────────────
+INPUT:
+  δ            : Vector[J]       # Mean utilities
+  α            : Scalar          # Price sensitivity
+  c            : Vector[J]       # Marginal costs
+  Ω            : Matrix[J,J]     # Ownership matrix
+  λ            : Scalar          # Damping factor (default: 1.0)
+  ε            : Scalar          # Convergence tolerance
+  K            : Int             # Maximum iterations
+
+OUTPUT:
+  p            : Vector[J]       # Equilibrium prices
+  η            : Vector[J]       # Equilibrium markups
+  s            : Vector[J]       # Equilibrium market shares
+  converged    : Bool            # Convergence flag
+
+PROCEDURE:
+  # Initialize markups (start from marginal cost pricing)
+  η : Vector[J] ← zeros(J)
+  
+  FOR k = 1 TO K:
+    # Current prices
+    p : Vector[J] ← c + η
+    
+    # Compute market shares
+    s : Vector[J] ← COMPUTE_SHARES(δ, α, p)
+    
+    # Compute share derivative matrix
+    Δ : Matrix[J,J] ← COMPUTE_DELTA(α, s)
+    
+    # Compute new markups from FOC
+    η_new : Vector[J] ← SOLVE_MARKUP_EQUATION(Ω, Δ, s)
+    
+    # Damped update
+    η_update : Vector[J] ← (1 - λ) * η + λ * η_new
+    
+    # Check convergence
+    IF max(|η_update - η|) &lt; ε:
+      η ← η_update
+      p ← c + η
+      s ← COMPUTE_SHARES(δ, α, p)
+      RETURN (p, η, s, converged=True)
+    
+    η ← η_update
+  
+  # Did not converge
+  p ← c + η
+  s ← COMPUTE_SHARES(δ, α, p)
+  RETURN (p, η, s, converged=False)</code></pre>
+</section>
+<section id="subroutines" class="level3">
+<h3 class="anchored" data-anchor-id="subroutines">Subroutines</h3>
+<pre><code>SUBROUTINE: COMPUTE_SHARES
+──────────────────────────
+INPUT:
+  δ      : Vector[J]             # Mean utilities
+  α      : Scalar                # Price sensitivity
+  p      : Vector[J]             # Prices
+OUTPUT:
+  s      : Vector[J]             # Market shares
+
+  # Compute mean utilities net of price
+  v : Vector[J] ← δ - α * p
+  
+  # Numerically stable softmax
+  v_max : Scalar ← max(v)
+  exp_v : Vector[J] ← exp(v - v_max)
+  denom : Scalar ← exp(-v_max) + sum(exp_v)
+  
+  s : Vector[J] ← exp_v / denom
+  RETURN s</code></pre>
+<pre><code>SUBROUTINE: COMPUTE_DELTA
+─────────────────────────
+INPUT:
+  α      : Scalar                # Price sensitivity
+  s      : Vector[J]             # Market shares
+OUTPUT:
+  Δ      : Matrix[J,J]           # Share derivative matrix
+
+  # Δ_jk = -∂s_j/∂p_k
+  FOR j = 1 TO J:
+    FOR k = 1 TO J:
+      IF j = k:
+        Δ[j,k] ← α * s[j] * (1 - s[j])    # Own-price
+      ELSE:
+        Δ[j,k] ← -α * s[j] * s[k]          # Cross-price
+  
+  RETURN Δ</code></pre>
+<pre><code>SUBROUTINE: SOLVE_MARKUP_EQUATION
+─────────────────────────────────
+INPUT:
+  Ω      : Matrix[J,J]           # Ownership matrix
+  Δ      : Matrix[J,J]           # Share derivative matrix
+  s      : Vector[J]             # Market shares
+OUTPUT:
+  η      : Vector[J]             # Markups
+
+  # Compute Ω ⊙ Δ (element-wise product)
+  A : Matrix[J,J] ← Ω ⊙ Δ
+  
+  # Solve linear system: A * η = -s
+  η : Vector[J] ← SOLVE_LINEAR_SYSTEM(A, -s)
+  
+  RETURN η</code></pre>
+</section>
+<section id="convergence-properties" class="level3">
+<h3 class="anchored" data-anchor-id="convergence-properties">Convergence Properties</h3>
+<p>The fixed-point iteration converges when the mapping is a <strong>contraction</strong>. Key factors affecting convergence:</p>
+<ol type="1">
+<li><strong>Price sensitivity <span class="math inline">\(\alpha\)</span></strong>: Higher <span class="math inline">\(\alpha\)</span> → more elastic demand → smaller markups → faster convergence</li>
+<li><strong>Market concentration</strong>: More products owned by same firm → larger markups → slower convergence</li>
+<li><strong>Damping <span class="math inline">\(\lambda\)</span></strong>: Smaller <span class="math inline">\(\lambda\)</span> → more stable but slower</li>
+</ol>
+</section>
+<section id="verification-plan" class="level3">
+<h3 class="anchored" data-anchor-id="verification-plan">Verification Plan</h3>
+<p>To validate the solver:</p>
+<ol type="1">
+<li><strong>FOC residuals</strong>: Check <span class="math inline">\(\| s + (\Omega \odot \Delta)(p - c) \|_\infty &lt; \varepsilon\)</span></li>
+<li><strong>Symmetric benchmark</strong>: For symmetric products with single-product firms, verify <span class="math inline">\(\eta_j = \frac{1}{\alpha(1 - s_j)}\)</span></li>
+<li><strong>Monopoly benchmark</strong>: Single firm owning all products should yield monopoly prices</li>
+<li><strong>Comparative statics</strong>: Higher <span class="math inline">\(\alpha\)</span> → lower markups; merger (change <span class="math inline">\(\Omega\)</span>) → higher markups</li>
+</ol>
+</section>
 </section>
 <section id="implementation" class="level2">
 <h2 class="anchored" data-anchor-id="implementation">Implementation</h2>
 <section id="setup" class="level3">
 <h3 class="anchored" data-anchor-id="setup">Setup</h3>
 <div id="setup" class="cell" data-cache="false" data-execution_count="1">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Standard libraries</span></span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Add project paths</span></span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>sys.path.insert(<span class="dv">0</span>, <span class="st">"../../../src"</span>)</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>sys.path.insert(<span class="dv">0</span>, <span class="st">"../config_opm"</span>)</span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>sys.path.insert(<span class="dv">0</span>, <span class="st">"../../utils"</span>)</span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"Modules loaded successfully"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Standard libraries</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Add project paths</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>sys.path.insert(<span class="dv">0</span>, <span class="st">"../../../src"</span>)</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>sys.path.insert(<span class="dv">0</span>, <span class="st">"../config_opm"</span>)</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>sys.path.insert(<span class="dv">0</span>, <span class="st">"../../utils"</span>)</span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"Modules loaded successfully"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Modules loaded successfully</code></pre>
 </div>
@@ -301,9 +575,9 @@ p - c = -(\Omega \odot \Delta)^{-1} s
 <section id="model-parameters" class="level3">
 <h3 class="anchored" data-anchor-id="model-parameters">Model Parameters</h3>
 <div id="parameters" class="cell" data-execution_count="2">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Parameters will be loaded from config_opm/config.py</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="co"># For now, placeholder</span></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"Parameters to be loaded from config"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Parameters will be loaded from config_opm/config.py</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="co"># For now, placeholder</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"Parameters to be loaded from config"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Parameters to be loaded from config</code></pre>
 </div>
@@ -312,8 +586,8 @@ p - c = -(\Omega \odot \Delta)^{-1} s
 <section id="solve-equilibrium" class="level3">
 <h3 class="anchored" data-anchor-id="solve-equilibrium">Solve Equilibrium</h3>
 <div id="solve" class="cell" data-execution_count="3">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Solver implementation will go here</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"Solver to be implemented"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Solver implementation will go here</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"Solver to be implemented"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Solver to be implemented</code></pre>
 </div>
@@ -324,8 +598,8 @@ p - c = -(\Omega \odot \Delta)^{-1} s
 <h2 class="anchored" data-anchor-id="results">Results</h2>
 <p><em>(To be filled: equilibrium prices, markups, market shares)</em></p>
 </section>
-<section id="comparative-statics" class="level2">
-<h2 class="anchored" data-anchor-id="comparative-statics">Comparative Statics</h2>
+<section id="comparative-statics-1" class="level2">
+<h2 class="anchored" data-anchor-id="comparative-statics-1">Comparative Statics</h2>
 <p><em>(To be filled: effects of varying demand elasticity, costs, etc.)</em></p>
 </section>
 <section id="conclusion" class="level2">

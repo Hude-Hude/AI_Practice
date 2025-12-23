@@ -78,7 +78,7 @@ $$
 
 In a Bertrand-Nash equilibrium, each firm $f$ chooses prices for its products to maximize profit, taking rivals' prices as given:
 $$
-\max_{\{p_j\}_{j \in \mathcal{J}_f}} \sum_{j \in \mathcal{J}_f} (p_j - c_j) \cdot M \cdot s_j(p)
+\max_{\{p_j\}_{j \in \mathcal{J}_f}} \sum_{j \in \mathcal{J}_f} (p_j - c_j) \cdot s_j(p)
 $$
 
 ### First-Order Conditions
@@ -137,9 +137,245 @@ This is the **markup equation**: equilibrium prices equal marginal cost plus a m
 2. **Price sensitivity** $\alpha$ — higher sensitivity reduces markups
 3. **Ownership structure** $\Omega$ — multi-product firms internalize cannibalization
 
+## Analytical Benchmarks
+
+### Single-Product Firms
+
+When each firm owns exactly one product ($\Omega = I$), the FOC for product $j$ simplifies to:
+$$
+s_j - \alpha s_j (1 - s_j) \eta_j = 0
+$$
+
+Solving for the markup:
+$$
+\eta_j = \frac{1}{\alpha (1 - s_j)}
+$$
+
+**Interpretation**: Markup is inversely proportional to:
+
+- Price sensitivity $\alpha$
+- "Competitive pressure" $(1 - s_j)$ = probability of losing customer to other products
+
+### Symmetric Equilibrium
+
+For identical products ($\delta_j = \delta$, $c_j = c$ for all $j$) with single-product firms, the symmetric equilibrium has $s_j = s$ for all $j$:
+$$
+s = \frac{\exp(\delta - \alpha p)}{1 + J \exp(\delta - \alpha p)}
+$$
+
+With markup $\eta = \frac{1}{\alpha(1-s)}$.
+
+As $J \to \infty$: $s \to 0$, so $\eta \to \frac{1}{\alpha}$ (competitive limit).
+
+### Comparative Statics
+
+| Parameter | Change | Effect on Markup $\eta$ | Effect on Price $p$ | Intuition |
+|-----------|--------|-------------------------|---------------------|-----------|
+| $\alpha$ ↑ | More price sensitive | $\eta$ ↓ | $p$ ↓ | Elastic demand → less market power |
+| $\delta_j$ ↑ | Higher quality | $\eta_j$ ↑ | $p_j$ ↑ | Higher $s_j$ → more inelastic residual demand |
+| $c_j$ ↑ | Higher cost | — | $p_j$ ↑ | Cost pass-through |
+| $J$ ↑ | More competitors | $\eta$ ↓ | $p$ ↓ | Lower shares → more competition |
+| Merger | $\Omega_{jk}: 0 \to 1$ | $\eta_j, \eta_k$ ↑ | $p_j, p_k$ ↑ | Internalize cannibalization |
+
+### Cost Pass-Through
+
+For single-product firms with logit demand, the pass-through rate measures how much of a cost increase is passed to consumers:
+$$
+\rho_j = \frac{\partial p_j}{\partial c_j}
+$$
+
+Differentiating the equilibrium condition yields:
+$$
+\rho_j = \frac{1}{1 + \alpha s_j \eta_j}
+$$
+
+Substituting $\eta_j = \frac{1}{\alpha(1-s_j)}$:
+$$
+\rho_j = \frac{1}{1 + \frac{s_j}{1-s_j}} = 1 - s_j
+$$
+
+**Result**: Pass-through $\rho_j = 1 - s_j < 1$.
+
+**Interpretation**:
+
+- Firms with **higher market share** absorb more of cost increases ($\rho_j$ lower)
+- Firms with **lower market share** pass through more to consumers ($\rho_j$ closer to 1)
+- In the competitive limit ($s_j \to 0$): $\rho_j \to 1$ (full pass-through)
+
 ## Solution Method
 
-*(To be filled: algorithm description, pseudocode)*
+### Fixed-Point Iteration on Markups
+
+The markup equation defines a fixed-point problem. Define the markup $\eta_j = p_j - c_j$. Given prices $p = c + \eta$, the equilibrium markup satisfies:
+$$
+\eta = -(\Omega \odot \Delta(c + \eta))^{-1} s(c + \eta)
+$$
+
+This suggests the **fixed-point iteration**:
+$$
+\eta^{(k+1)} = -(\Omega \odot \Delta(p^{(k)}))^{-1} s(p^{(k)})
+$$
+where $p^{(k)} = c + \eta^{(k)}$.
+
+### Damped Iteration
+
+For stability, we use **damping** (convex combination of old and new):
+$$
+\eta^{(k+1)} = (1 - \lambda) \eta^{(k)} + \lambda \left[ -(\Omega \odot \Delta(p^{(k)}))^{-1} s(p^{(k)}) \right]
+$$
+where $\lambda \in (0, 1]$ is the damping factor. Smaller $\lambda$ improves stability at the cost of slower convergence.
+
+### Convergence Criterion
+
+Iterate until the markup change is small:
+$$
+\| \eta^{(k+1)} - \eta^{(k)} \|_\infty < \varepsilon
+$$
+
+### Type Definitions
+
+```
+TYPE DEFINITIONS
+────────────────
+Scalar      = Float                      # Single real number
+Vector[J]   = Array[Float, J]            # 1D array of J floats
+Matrix[J,J] = Array[Float, J, J]         # 2D array of shape (J, J)
+```
+
+### Algorithm
+
+```
+ALGORITHM: SOLVE_EQUILIBRIUM_PRICES
+───────────────────────────────────
+INPUT:
+  δ            : Vector[J]       # Mean utilities
+  α            : Scalar          # Price sensitivity
+  c            : Vector[J]       # Marginal costs
+  Ω            : Matrix[J,J]     # Ownership matrix
+  λ            : Scalar          # Damping factor (default: 1.0)
+  ε            : Scalar          # Convergence tolerance
+  K            : Int             # Maximum iterations
+
+OUTPUT:
+  p            : Vector[J]       # Equilibrium prices
+  η            : Vector[J]       # Equilibrium markups
+  s            : Vector[J]       # Equilibrium market shares
+  converged    : Bool            # Convergence flag
+
+PROCEDURE:
+  # Initialize markups (start from marginal cost pricing)
+  η : Vector[J] ← zeros(J)
+  
+  FOR k = 1 TO K:
+    # Current prices
+    p : Vector[J] ← c + η
+    
+    # Compute market shares
+    s : Vector[J] ← COMPUTE_SHARES(δ, α, p)
+    
+    # Compute share derivative matrix
+    Δ : Matrix[J,J] ← COMPUTE_DELTA(α, s)
+    
+    # Compute new markups from FOC
+    η_new : Vector[J] ← SOLVE_MARKUP_EQUATION(Ω, Δ, s)
+    
+    # Damped update
+    η_update : Vector[J] ← (1 - λ) * η + λ * η_new
+    
+    # Check convergence
+    IF max(|η_update - η|) < ε:
+      η ← η_update
+      p ← c + η
+      s ← COMPUTE_SHARES(δ, α, p)
+      RETURN (p, η, s, converged=True)
+    
+    η ← η_update
+  
+  # Did not converge
+  p ← c + η
+  s ← COMPUTE_SHARES(δ, α, p)
+  RETURN (p, η, s, converged=False)
+```
+
+### Subroutines
+
+```
+SUBROUTINE: COMPUTE_SHARES
+──────────────────────────
+INPUT:
+  δ      : Vector[J]             # Mean utilities
+  α      : Scalar                # Price sensitivity
+  p      : Vector[J]             # Prices
+OUTPUT:
+  s      : Vector[J]             # Market shares
+
+  # Compute mean utilities net of price
+  v : Vector[J] ← δ - α * p
+  
+  # Numerically stable softmax
+  v_max : Scalar ← max(v)
+  exp_v : Vector[J] ← exp(v - v_max)
+  denom : Scalar ← exp(-v_max) + sum(exp_v)
+  
+  s : Vector[J] ← exp_v / denom
+  RETURN s
+```
+
+```
+SUBROUTINE: COMPUTE_DELTA
+─────────────────────────
+INPUT:
+  α      : Scalar                # Price sensitivity
+  s      : Vector[J]             # Market shares
+OUTPUT:
+  Δ      : Matrix[J,J]           # Share derivative matrix
+
+  # Δ_jk = -∂s_j/∂p_k
+  FOR j = 1 TO J:
+    FOR k = 1 TO J:
+      IF j = k:
+        Δ[j,k] ← α * s[j] * (1 - s[j])    # Own-price
+      ELSE:
+        Δ[j,k] ← -α * s[j] * s[k]          # Cross-price
+  
+  RETURN Δ
+```
+
+```
+SUBROUTINE: SOLVE_MARKUP_EQUATION
+─────────────────────────────────
+INPUT:
+  Ω      : Matrix[J,J]           # Ownership matrix
+  Δ      : Matrix[J,J]           # Share derivative matrix
+  s      : Vector[J]             # Market shares
+OUTPUT:
+  η      : Vector[J]             # Markups
+
+  # Compute Ω ⊙ Δ (element-wise product)
+  A : Matrix[J,J] ← Ω ⊙ Δ
+  
+  # Solve linear system: A * η = -s
+  η : Vector[J] ← SOLVE_LINEAR_SYSTEM(A, -s)
+  
+  RETURN η
+```
+
+### Convergence Properties
+
+The fixed-point iteration converges when the mapping is a **contraction**. Key factors affecting convergence:
+
+1. **Price sensitivity $\alpha$**: Higher $\alpha$ → more elastic demand → smaller markups → faster convergence
+2. **Market concentration**: More products owned by same firm → larger markups → slower convergence
+3. **Damping $\lambda$**: Smaller $\lambda$ → more stable but slower
+
+### Verification Plan
+
+To validate the solver:
+
+1. **FOC residuals**: Check $\| s + (\Omega \odot \Delta)(p - c) \|_\infty < \varepsilon$
+2. **Symmetric benchmark**: For symmetric products with single-product firms, verify $\eta_j = \frac{1}{\alpha(1 - s_j)}$
+3. **Monopoly benchmark**: Single firm owning all products should yield monopoly prices
+4. **Comparative statics**: Higher $\alpha$ → lower markups; merger (change $\Omega$) → higher markups
 
 ## Implementation
 
