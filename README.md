@@ -1,6 +1,6 @@
 # AI Practice: Structural Model Estimation
 
-A Python framework for **solving**, **simulating**, and **estimating** structural economic models using neural network value iteration.
+A Python framework for **solving**, **simulating**, and **estimating** structural economic models.
 
 ## Supported Models
 
