@@ -3,7 +3,7 @@
 import torch
 import torch.nn.functional as F
 
-from mdp.solver import (
+from mdp.solver_mdp import (
     MonotonicLinear,
     TanhActivation,
     build_monotonic_network,

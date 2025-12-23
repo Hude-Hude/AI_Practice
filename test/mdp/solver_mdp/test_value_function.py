@@ -2,7 +2,7 @@
 
 import torch
 
-from mdp.solver import (
+from mdp.solver_mdp import (
     build_monotonic_network,
     compute_bellman_loss,
     compute_bellman_targets,

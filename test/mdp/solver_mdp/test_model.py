@@ -2,7 +2,7 @@
 
 import torch
 
-from mdp.solver import clamp_states, compute_next_state, compute_reward
+from mdp.solver_mdp import clamp_states, compute_next_state, compute_reward
 
 
 class TestComputeReward:

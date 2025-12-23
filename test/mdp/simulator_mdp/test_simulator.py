@@ -3,16 +3,16 @@
 import numpy as np
 import torch
 
-from mdp.solver import (
+from mdp.solver_mdp import (
     build_monotonic_network,
     compute_choice_probability,
     solve_value_function,
 )
-from mdp.simulator import (
+from mdp.simulator_mdp import (
     simulate_mdp_panel,
     PanelData,
 )
-from mdp.simulator.mdp_simulator import (
+from mdp.simulator_mdp.mdp_simulator import (
     compute_reward,
     compute_next_state,
 )

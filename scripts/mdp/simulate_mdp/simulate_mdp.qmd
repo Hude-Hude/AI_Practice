@@ -25,7 +25,7 @@ sys.path.insert(0, "../config_mdp")
 sys.path.insert(0, "../../utils")
 
 # Import MDP solver
-from mdp.solver import (
+from mdp.solver_mdp import (
     build_monotonic_network,
     evaluate_network,
     compute_choice_probability,
@@ -33,7 +33,7 @@ from mdp.solver import (
 )
 
 # Import MDP simulator
-from mdp.simulator import simulate_mdp_panel
+from mdp.simulator_mdp import simulate_mdp_panel
 
 # Import configuration
 import config

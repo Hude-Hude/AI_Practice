@@ -574,7 +574,7 @@ sys.path.insert(0, "../config_mdp")
 sys.path.insert(0, "../../utils")
 
 # Import MDP solver
-from mdp.solver import (
+from mdp.solver_mdp import (
     solve_value_function,
     compute_choice_probability,
     evaluate_network,

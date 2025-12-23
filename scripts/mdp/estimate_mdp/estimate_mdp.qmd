@@ -237,8 +237,8 @@ from config import (
 )
 
 # Import estimator (two-step approach)
-from mdp.estimator import estimate_two_step, TwoStepResult
-from mdp.simulator import PanelData
+from mdp.estimator_mdp import estimate_two_step, TwoStepResult
+from mdp.simulator_mdp import PanelData
 
 # Paths
 SIMULATE_OUTPUT_PATH = '../../../output/mdp/simulate'
@@ -368,7 +368,7 @@ print(f"  N obs = {result.gamma_ols_details['n_obs']}")
 ```{python}
 #| label: likelihood-check
 
-from mdp.estimator import compute_log_likelihood
+from mdp.estimator_mdp import compute_log_likelihood
 import torch
 import os
 

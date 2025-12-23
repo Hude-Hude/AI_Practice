@@ -107,12 +107,12 @@ AI_Practice/
 
 ## Pipeline Details
 
-### 1. MDP Solver (`src/mdp/solver`)
+### 1. MDP Solver (`src/mdp/solver_mdp`)
 
 Solves the Bellman equation using neural network approximation with **target networks** for stability:
 
 ```python
-from mdp.solver import solve_value_function
+from mdp.solver_mdp import solve_value_function
 
 v0_net, v1_net, losses, n_iter = solve_value_function(
     beta=1.0, gamma=0.1, delta=0.95,
@@ -127,12 +127,12 @@ v0_net, v1_net, losses, n_iter = solve_value_function(
 - **Tanh activation**: Bounded outputs prevent explosive growth
 - **Comparative statics**: Reports analyze effects of varying β (0→2) and γ (0→0.1)
 
-### 2. MDP Simulator (`src/mdp/simulator`)
+### 2. MDP Simulator (`src/mdp/simulator_mdp`)
 
 Generates synthetic panel data using solved value functions:
 
 ```python
-from mdp.simulator import simulate_mdp_panel
+from mdp.simulator_mdp import simulate_mdp_panel
 
 panel = simulate_mdp_panel(
     v0_net, v1_net,
@@ -149,12 +149,12 @@ panel = simulate_mdp_panel(
 - Exact transition verification
 - Reward consistency
 
-### 3. MDP Estimator (`src/mdp/estimator`)
+### 3. MDP Estimator (`src/mdp/estimator_mdp`)
 
 Recovers structural parameters using **two-step estimation**:
 
 ```python
-from mdp.estimator import estimate_two_step
+from mdp.estimator_mdp import estimate_two_step
 
 result = estimate_two_step(
     data=panel,

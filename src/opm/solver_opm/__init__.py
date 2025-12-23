@@ -1,6 +1,6 @@
 """OPM Solver: Static Oligopoly Pricing Model."""
 
-from opm.solver.opm_solver import (
+from opm.solver_opm.opm_solver import (
     EquilibriumResult,
     compute_delta,
     compute_shares,

@@ -17,7 +17,7 @@ import os
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
-from mdp.estimator import (
+from mdp.estimator_mdp import (
     EstimationResult,
     TwoStepResult,
     estimate_gamma_ols,
@@ -28,7 +28,7 @@ from mdp.estimator import (
     grid_search_mle,
     compute_standard_errors,
 )
-from mdp.simulator import PanelData
+from mdp.simulator_mdp import PanelData
 
 
 # =============================================================================
