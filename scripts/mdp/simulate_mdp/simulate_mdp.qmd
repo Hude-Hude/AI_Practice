@@ -21,7 +21,7 @@ import torch
 
 # Add project paths
 sys.path.insert(0, "../../../src")
-sys.path.insert(0, "../config")
+sys.path.insert(0, "../config_mdp")
 sys.path.insert(0, "../../utils")
 
 # Import MDP solver

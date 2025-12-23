@@ -220,7 +220,7 @@ import torch
 
 # Add paths for local modules
 sys.path.insert(0, '../../../src')
-sys.path.insert(0, '../config')
+sys.path.insert(0, '../config_mdp')
 
 # Import configuration
 from config import (
