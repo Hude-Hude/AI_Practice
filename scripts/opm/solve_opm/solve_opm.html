@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>Problem: Solve the Static Oligopoly Pricing Model</title>
+<title>Solving a Static Oligopoly Pricing Model</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -19,6 +19,41 @@ ul.task-list li input[type="checkbox"] {
   width: 0.8em;
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 </style>
 
@@ -36,18 +71,80 @@ ul.task-list li input[type="checkbox"] {
 <link href="solve_opm_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
 <link href="solve_opm_files/libs/bootstrap/bootstrap-d6a003b94517c951b2d65075d42fb01b.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
 
 </head>
 
-<body class="fullcontent quarto-light">
+<body class="quarto-light">
 
 <div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
-
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#instruction" id="toc-instruction" class="nav-link active" data-scroll-target="#instruction">Instruction</a></li>
+  <li><a href="#model-setup" id="toc-model-setup" class="nav-link" data-scroll-target="#model-setup">Model Setup</a>
+  <ul class="collapse">
+  <li><a href="#demand-logit-model" id="toc-demand-logit-model" class="nav-link" data-scroll-target="#demand-logit-model">Demand: Logit Model</a></li>
+  <li><a href="#market-shares" id="toc-market-shares" class="nav-link" data-scroll-target="#market-shares">Market Shares</a></li>
+  <li><a href="#cost-structure" id="toc-cost-structure" class="nav-link" data-scroll-target="#cost-structure">Cost Structure</a></li>
+  </ul></li>
+  <li><a href="#equilibrium-conditions" id="toc-equilibrium-conditions" class="nav-link" data-scroll-target="#equilibrium-conditions">Equilibrium Conditions</a>
+  <ul class="collapse">
+  <li><a href="#bertrand-nash-equilibrium" id="toc-bertrand-nash-equilibrium" class="nav-link" data-scroll-target="#bertrand-nash-equilibrium">Bertrand-Nash Equilibrium</a></li>
+  <li><a href="#first-order-conditions" id="toc-first-order-conditions" class="nav-link" data-scroll-target="#first-order-conditions">First-Order Conditions</a></li>
+  <li><a href="#logit-share-derivatives" id="toc-logit-share-derivatives" class="nav-link" data-scroll-target="#logit-share-derivatives">Logit Share Derivatives</a></li>
+  <li><a href="#matrix-formulation" id="toc-matrix-formulation" class="nav-link" data-scroll-target="#matrix-formulation">Matrix Formulation</a></li>
+  <li><a href="#markup-equation" id="toc-markup-equation" class="nav-link" data-scroll-target="#markup-equation">Markup Equation</a></li>
+  </ul></li>
+  <li><a href="#solution-method" id="toc-solution-method" class="nav-link" data-scroll-target="#solution-method">Solution Method</a></li>
+  <li><a href="#implementation" id="toc-implementation" class="nav-link" data-scroll-target="#implementation">Implementation</a>
+  <ul class="collapse">
+  <li><a href="#setup" id="toc-setup" class="nav-link" data-scroll-target="#setup">Setup</a></li>
+  <li><a href="#model-parameters" id="toc-model-parameters" class="nav-link" data-scroll-target="#model-parameters">Model Parameters</a></li>
+  <li><a href="#solve-equilibrium" id="toc-solve-equilibrium" class="nav-link" data-scroll-target="#solve-equilibrium">Solve Equilibrium</a></li>
+  </ul></li>
+  <li><a href="#results" id="toc-results" class="nav-link" data-scroll-target="#results">Results</a></li>
+  <li><a href="#comparative-statics" id="toc-comparative-statics" class="nav-link" data-scroll-target="#comparative-statics">Comparative Statics</a></li>
+  <li><a href="#conclusion" id="toc-conclusion" class="nav-link" data-scroll-target="#conclusion">Conclusion</a></li>
+  </ul>
+</nav>
+</div>
 <main class="content" id="quarto-document-content">
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">Problem: Solve the Static Oligopoly Pricing Model</h1>
+<h1 class="title">Solving a Static Oligopoly Pricing Model</h1>
+<p class="subtitle lead">Bertrand Competition with Differentiated Products</p>
 </div>
 
 
@@ -64,28 +161,176 @@ ul.task-list li input[type="checkbox"] {
 </header>
 
 
-<section id="goal" class="level2">
-<h2 class="anchored" data-anchor-id="goal">Goal</h2>
-<p>Replicate the structure of <code>scripts/solve_mdp/solve_mdp.qmd</code>, but replace the Markov Decision Process with a <strong>static oligopoly pricing model</strong> in which multiple firms set prices simultaneously to maximize period profits. The objective is to design and document a solver that:</p>
+<section id="instruction" class="level2">
+<h2 class="anchored" data-anchor-id="instruction">Instruction</h2>
+<p><strong>Goal</strong>: Replicate the structure of <code>scripts/solve_mdp/solve_mdp.qmd</code>, but replace the Markov Decision Process with a <strong>static oligopoly pricing model</strong> in which multiple firms set prices simultaneously to maximize period profits. The objective is to design and document a solver that:</p>
 <ul>
 <li>Specifies firm demand (e.g., logit demand with market share as a function of own price and rivals’ prices)</li>
 <li>Defines marginal costs and strategic interaction assumptions (Bertrand competition with differentiated products)</li>
 <li>Derives the Nash equilibrium first-order conditions for optimal prices</li>
 <li>Implements a numerical fixed-point or contraction mapping routine that solves for equilibrium prices and markups under the chosen demand system</li>
 </ul>
-</section>
-<section id="required-components" class="level2">
-<h2 class="anchored" data-anchor-id="required-components">Required Components</h2>
+<p><strong>Required Components</strong>:</p>
 <ol type="1">
 <li><strong>Model primitives</strong>: Demand parameters, cost structure, number of firms/products, and any demand and cost shifters.</li>
 <li><strong>Equilibrium algorithm</strong>: Specify how to numerically solve the nonlinear system of first-order conditions (FOCs) characterizing the static Nash equilibrium in prices.</li>
 <li><strong>Verification plan</strong>: Outline how juniors should validate convergence (e.g., norm of FOC residuals, comparison to analytical benchmarks in symmetric cases).</li>
 <li><strong>Documentation</strong>: Describe expected figures/tables (e.g., comparative statics over demand elasticities, passthrough analyses) without implementing them.</li>
 </ol>
+<p><strong>Deliverable</strong>: An executable Quarto report and rendered html report that mirrors the MDP solver report while focusing entirely on the static oligopoly pricing equilibrium problem.</p>
+<hr>
 </section>
-<section id="deliverable" class="level2">
-<h2 class="anchored" data-anchor-id="deliverable">Deliverable</h2>
-<p>An executable Quarto report (to be implemented by juniors) that mirrors the MDP solver report while focusing entirely on the static oligopoly pricing equilibrium problem. Keep this file as an instruction-only scaffold; all code, figures, and tables are to be authored by the trainees.</p>
+<section id="model-setup" class="level2">
+<h2 class="anchored" data-anchor-id="model-setup">Model Setup</h2>
+<p>We consider a static oligopoly pricing model with:</p>
+<ul>
+<li><strong>Products</strong>: <span class="math inline">\(J\)</span> differentiated products indexed by <span class="math inline">\(j = 1, \ldots, J\)</span>, plus an outside option <span class="math inline">\(j = 0\)</span></li>
+<li><strong>Firms</strong>: <span class="math inline">\(F\)</span> firms, where firm <span class="math inline">\(f\)</span> owns a subset of products <span class="math inline">\(\mathcal{J}_f \subseteq \{1, \ldots, J\}\)</span></li>
+<li><strong>Market size</strong>: Normalized to <span class="math inline">\(M = 1\)</span> (equilibrium prices are independent of market size)</li>
+<li><strong>Competition</strong>: Bertrand (simultaneous price setting)</li>
+</ul>
+<section id="demand-logit-model" class="level3">
+<h3 class="anchored" data-anchor-id="demand-logit-model">Demand: Logit Model</h3>
+<p>Consumer <span class="math inline">\(i\)</span>’s indirect utility from product <span class="math inline">\(j\)</span> is: <span class="math display">\[
+u_{ij} = \delta_j - \alpha p_j + \varepsilon_{ij}
+\]</span></p>
+<p>where:</p>
+<ul>
+<li><span class="math inline">\(\delta_j\)</span> = mean utility of product <span class="math inline">\(j\)</span> (captures quality, characteristics)</li>
+<li><span class="math inline">\(\alpha &gt; 0\)</span> = price sensitivity coefficient</li>
+<li><span class="math inline">\(p_j\)</span> = price of product <span class="math inline">\(j\)</span></li>
+<li><span class="math inline">\(\varepsilon_{ij} \sim\)</span> Type-I Extreme Value (iid across consumers and products)</li>
+</ul>
+<p>The outside option provides utility <span class="math inline">\(u_{i0} = \varepsilon_{i0}\)</span> (normalized to zero mean utility).</p>
+</section>
+<section id="market-shares" class="level3">
+<h3 class="anchored" data-anchor-id="market-shares">Market Shares</h3>
+<p>Under the logit assumption, the market share of product <span class="math inline">\(j\)</span> is: <span class="math display">\[
+s_j(p) = \frac{\exp(\delta_j - \alpha p_j)}{1 + \sum_{k=1}^{J} \exp(\delta_k - \alpha p_k)}
+\]</span></p>
+<p>The outside option share is: <span class="math display">\[
+s_0(p) = \frac{1}{1 + \sum_{k=1}^{J} \exp(\delta_k - \alpha p_k)}
+\]</span></p>
+</section>
+<section id="cost-structure" class="level3">
+<h3 class="anchored" data-anchor-id="cost-structure">Cost Structure</h3>
+<p>Each product <span class="math inline">\(j\)</span> has constant marginal cost <span class="math inline">\(c_j\)</span>. Firm <span class="math inline">\(f\)</span>’s profit is: <span class="math display">\[
+\pi_f(p) = \sum_{j \in \mathcal{J}_f} (p_j - c_j) \cdot s_j(p)
+\]</span></p>
+</section>
+</section>
+<section id="equilibrium-conditions" class="level2">
+<h2 class="anchored" data-anchor-id="equilibrium-conditions">Equilibrium Conditions</h2>
+<section id="bertrand-nash-equilibrium" class="level3">
+<h3 class="anchored" data-anchor-id="bertrand-nash-equilibrium">Bertrand-Nash Equilibrium</h3>
+<p>In a Bertrand-Nash equilibrium, each firm <span class="math inline">\(f\)</span> chooses prices for its products to maximize profit, taking rivals’ prices as given: <span class="math display">\[
+\max_{\{p_j\}_{j \in \mathcal{J}_f}} \sum_{j \in \mathcal{J}_f} (p_j - c_j) \cdot M \cdot s_j(p)
+\]</span></p>
+</section>
+<section id="first-order-conditions" class="level3">
+<h3 class="anchored" data-anchor-id="first-order-conditions">First-Order Conditions</h3>
+<p>The FOC for product <span class="math inline">\(j\)</span> owned by firm <span class="math inline">\(f\)</span> is: <span class="math display">\[
+\frac{\partial \pi_f}{\partial p_j} = s_j + \sum_{k \in \mathcal{J}_f} (p_k - c_k) \cdot \frac{\partial s_k}{\partial p_j} = 0
+\]</span></p>
+</section>
+<section id="logit-share-derivatives" class="level3">
+<h3 class="anchored" data-anchor-id="logit-share-derivatives">Logit Share Derivatives</h3>
+<p>For the logit model, the share derivatives have closed-form expressions:</p>
+<p><strong>Own-price effect</strong> (negative): <span class="math display">\[
+\frac{\partial s_j}{\partial p_j} = -\alpha s_j (1 - s_j)
+\]</span></p>
+<p><strong>Cross-price effect</strong> (positive, for <span class="math inline">\(k \neq j\)</span>): <span class="math display">\[
+\frac{\partial s_k}{\partial p_j} = \alpha s_k s_j
+\]</span></p>
+</section>
+<section id="matrix-formulation" class="level3">
+<h3 class="anchored" data-anchor-id="matrix-formulation">Matrix Formulation</h3>
+<p>Define the following matrices:</p>
+<ul>
+<li><strong>Ownership matrix</strong> <span class="math inline">\(\Omega\)</span>: <span class="math inline">\(\Omega_{jk} = 1\)</span> if products <span class="math inline">\(j\)</span> and <span class="math inline">\(k\)</span> are owned by the same firm, <span class="math inline">\(0\)</span> otherwise</li>
+<li><strong>Share derivative matrix</strong> <span class="math inline">\(\Delta\)</span>: <span class="math inline">\(\Delta_{jk} = -\frac{\partial s_j}{\partial p_k}\)</span></li>
+</ul>
+<p>For logit demand: <span class="math display">\[
+\Delta_{jk} = \begin{cases}
+\alpha s_j (1 - s_j) &amp; \text{if } j = k \\
+-\alpha s_j s_k &amp; \text{if } j \neq k
+\end{cases}
+\]</span></p>
+</section>
+<section id="markup-equation" class="level3">
+<h3 class="anchored" data-anchor-id="markup-equation">Markup Equation</h3>
+<p>The system of FOCs can be written compactly as: <span class="math display">\[
+s + (\Omega \odot \Delta)(p - c) = 0
+\]</span></p>
+<p>where <span class="math inline">\(\odot\)</span> denotes element-wise (Hadamard) product.</p>
+<p>Solving for the equilibrium markup: <span class="math display">\[
+p - c = -(\Omega \odot \Delta)^{-1} s
+\]</span></p>
+<p>This is the <strong>markup equation</strong>: equilibrium prices equal marginal cost plus a markup that depends on:</p>
+<ol type="1">
+<li><strong>Market shares</strong> <span class="math inline">\(s\)</span> — higher shares imply more market power</li>
+<li><strong>Price sensitivity</strong> <span class="math inline">\(\alpha\)</span> — higher sensitivity reduces markups</li>
+<li><strong>Ownership structure</strong> <span class="math inline">\(\Omega\)</span> — multi-product firms internalize cannibalization</li>
+</ol>
+</section>
+</section>
+<section id="solution-method" class="level2">
+<h2 class="anchored" data-anchor-id="solution-method">Solution Method</h2>
+<p><em>(To be filled: algorithm description, pseudocode)</em></p>
+</section>
+<section id="implementation" class="level2">
+<h2 class="anchored" data-anchor-id="implementation">Implementation</h2>
+<section id="setup" class="level3">
+<h3 class="anchored" data-anchor-id="setup">Setup</h3>
+<div id="setup" class="cell" data-cache="false" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Standard libraries</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Add project paths</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>sys.path.insert(<span class="dv">0</span>, <span class="st">"../../../src"</span>)</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>sys.path.insert(<span class="dv">0</span>, <span class="st">"../config_opm"</span>)</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>sys.path.insert(<span class="dv">0</span>, <span class="st">"../../utils"</span>)</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"Modules loaded successfully"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Modules loaded successfully</code></pre>
+</div>
+</div>
+</section>
+<section id="model-parameters" class="level3">
+<h3 class="anchored" data-anchor-id="model-parameters">Model Parameters</h3>
+<div id="parameters" class="cell" data-execution_count="2">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Parameters will be loaded from config_opm/config.py</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="co"># For now, placeholder</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"Parameters to be loaded from config"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Parameters to be loaded from config</code></pre>
+</div>
+</div>
+</section>
+<section id="solve-equilibrium" class="level3">
+<h3 class="anchored" data-anchor-id="solve-equilibrium">Solve Equilibrium</h3>
+<div id="solve" class="cell" data-execution_count="3">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Solver implementation will go here</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"Solver to be implemented"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Solver to be implemented</code></pre>
+</div>
+</div>
+</section>
+</section>
+<section id="results" class="level2">
+<h2 class="anchored" data-anchor-id="results">Results</h2>
+<p><em>(To be filled: equilibrium prices, markups, market shares)</em></p>
+</section>
+<section id="comparative-statics" class="level2">
+<h2 class="anchored" data-anchor-id="comparative-statics">Comparative Statics</h2>
+<p><em>(To be filled: effects of varying demand elasticity, costs, etc.)</em></p>
+</section>
+<section id="conclusion" class="level2">
+<h2 class="anchored" data-anchor-id="conclusion">Conclusion</h2>
+<p><em>(To be filled: interpretation of results)</em></p>
 </section>
 
 </main>

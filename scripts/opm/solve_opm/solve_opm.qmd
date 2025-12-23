@@ -1,31 +1,193 @@
 ---
-title: "Problem: Solve the Static Oligopoly Pricing Model"
+title: "Solving a Static Oligopoly Pricing Model"
+subtitle: "Bertrand Competition with Differentiated Products"
 format:
   html:
-    toc: false
     code-fold: false
-jupyter: python3
-execute:
-  echo: false
-  warning: false
+    toc: true
+    toc-depth: 3
 ---
 
-## Goal
+## Instruction
 
-Replicate the structure of `scripts/solve_mdp/solve_mdp.qmd`, but replace the Markov Decision Process with a **static oligopoly pricing model** in which multiple firms set prices simultaneously to maximize period profits. The objective is to design and document a solver that:
+**Goal**: Replicate the structure of `scripts/solve_mdp/solve_mdp.qmd`, but replace the Markov Decision Process with a **static oligopoly pricing model** in which multiple firms set prices simultaneously to maximize period profits. The objective is to design and document a solver that:
 
 - Specifies firm demand (e.g., logit demand with market share as a function of own price and rivals' prices)
 - Defines marginal costs and strategic interaction assumptions (Bertrand competition with differentiated products)
 - Derives the Nash equilibrium first-order conditions for optimal prices
 - Implements a numerical fixed-point or contraction mapping routine that solves for equilibrium prices and markups under the chosen demand system
 
-## Required Components
+**Required Components**:
 
 1. **Model primitives**: Demand parameters, cost structure, number of firms/products, and any demand and cost shifters.
 2. **Equilibrium algorithm**: Specify how to numerically solve the nonlinear system of first-order conditions (FOCs) characterizing the static Nash equilibrium in prices.
 3. **Verification plan**: Outline how juniors should validate convergence (e.g., norm of FOC residuals, comparison to analytical benchmarks in symmetric cases).
 4. **Documentation**: Describe expected figures/tables (e.g., comparative statics over demand elasticities, passthrough analyses) without implementing them.
 
-## Deliverable
+**Deliverable**: An executable Quarto report and rendered html report that mirrors the MDP solver report while focusing entirely on the static oligopoly pricing equilibrium problem.
 
-An executable Quarto report (to be implemented by juniors) and rendered html report that mirrors the MDP solver report while focusing entirely on the static oligopoly pricing equilibrium problem. Keep this file as an instruction-only scaffold; all code, figures, and tables are to be authored by the trainees.
+---
+
+## Model Setup
+
+We consider a static oligopoly pricing model with:
+
+- **Products**: $J$ differentiated products indexed by $j = 1, \ldots, J$, plus an outside option $j = 0$
+- **Firms**: $F$ firms, where firm $f$ owns a subset of products $\mathcal{J}_f \subseteq \{1, \ldots, J\}$
+- **Market size**: Normalized to $M = 1$ (equilibrium prices are independent of market size)
+- **Competition**: Bertrand (simultaneous price setting)
+
+### Demand: Logit Model
+
+Consumer $i$'s indirect utility from product $j$ is:
+$$
+u_{ij} = \delta_j - \alpha p_j + \varepsilon_{ij}
+$$
+
+where:
+
+- $\delta_j$ = mean utility of product $j$ (captures quality, characteristics)
+- $\alpha > 0$ = price sensitivity coefficient
+- $p_j$ = price of product $j$
+- $\varepsilon_{ij} \sim$ Type-I Extreme Value (iid across consumers and products)
+
+The outside option provides utility $u_{i0} = \varepsilon_{i0}$ (normalized to zero mean utility).
+
+### Market Shares
+
+Under the logit assumption, the market share of product $j$ is:
+$$
+s_j(p) = \frac{\exp(\delta_j - \alpha p_j)}{1 + \sum_{k=1}^{J} \exp(\delta_k - \alpha p_k)}
+$$
+
+The outside option share is:
+$$
+s_0(p) = \frac{1}{1 + \sum_{k=1}^{J} \exp(\delta_k - \alpha p_k)}
+$$
+
+### Cost Structure
+
+Each product $j$ has constant marginal cost $c_j$. Firm $f$'s profit is:
+$$
+\pi_f(p) = \sum_{j \in \mathcal{J}_f} (p_j - c_j) \cdot s_j(p)
+$$
+
+## Equilibrium Conditions
+
+### Bertrand-Nash Equilibrium
+
+In a Bertrand-Nash equilibrium, each firm $f$ chooses prices for its products to maximize profit, taking rivals' prices as given:
+$$
+\max_{\{p_j\}_{j \in \mathcal{J}_f}} \sum_{j \in \mathcal{J}_f} (p_j - c_j) \cdot M \cdot s_j(p)
+$$
+
+### First-Order Conditions
+
+The FOC for product $j$ owned by firm $f$ is:
+$$
+\frac{\partial \pi_f}{\partial p_j} = s_j + \sum_{k \in \mathcal{J}_f} (p_k - c_k) \cdot \frac{\partial s_k}{\partial p_j} = 0
+$$
+
+### Logit Share Derivatives
+
+For the logit model, the share derivatives have closed-form expressions:
+
+**Own-price effect** (negative):
+$$
+\frac{\partial s_j}{\partial p_j} = -\alpha s_j (1 - s_j)
+$$
+
+**Cross-price effect** (positive, for $k \neq j$):
+$$
+\frac{\partial s_k}{\partial p_j} = \alpha s_k s_j
+$$
+
+### Matrix Formulation
+
+Define the following matrices:
+
+- **Ownership matrix** $\Omega$: $\Omega_{jk} = 1$ if products $j$ and $k$ are owned by the same firm, $0$ otherwise
+- **Share derivative matrix** $\Delta$: $\Delta_{jk} = -\frac{\partial s_j}{\partial p_k}$
+
+For logit demand:
+$$
+\Delta_{jk} = \begin{cases}
+\alpha s_j (1 - s_j) & \text{if } j = k \\
+-\alpha s_j s_k & \text{if } j \neq k
+\end{cases}
+$$
+
+### Markup Equation
+
+The system of FOCs can be written compactly as:
+$$
+s + (\Omega \odot \Delta)(p - c) = 0
+$$
+
+where $\odot$ denotes element-wise (Hadamard) product.
+
+Solving for the equilibrium markup:
+$$
+p - c = -(\Omega \odot \Delta)^{-1} s
+$$
+
+This is the **markup equation**: equilibrium prices equal marginal cost plus a markup that depends on:
+
+1. **Market shares** $s$ — higher shares imply more market power
+2. **Price sensitivity** $\alpha$ — higher sensitivity reduces markups
+3. **Ownership structure** $\Omega$ — multi-product firms internalize cannibalization
+
+## Solution Method
+
+*(To be filled: algorithm description, pseudocode)*
+
+## Implementation
+
+### Setup
+
+```{python}
+#| label: setup
+#| cache: false
+
+# Standard libraries
+import sys
+import numpy as np
+
+# Add project paths
+sys.path.insert(0, "../../../src")
+sys.path.insert(0, "../config_opm")
+sys.path.insert(0, "../../utils")
+
+print("Modules loaded successfully")
+```
+
+### Model Parameters
+
+```{python}
+#| label: parameters
+
+# Parameters will be loaded from config_opm/config.py
+# For now, placeholder
+print("Parameters to be loaded from config")
+```
+
+### Solve Equilibrium
+
+```{python}
+#| label: solve
+
+# Solver implementation will go here
+print("Solver to be implemented")
+```
+
+## Results
+
+*(To be filled: equilibrium prices, markups, market shares)*
+
+## Comparative Statics
+
+*(To be filled: effects of varying demand elasticity, costs, etc.)*
+
+## Conclusion
+
+*(To be filled: interpretation of results)*
