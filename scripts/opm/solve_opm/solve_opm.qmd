@@ -202,6 +202,132 @@ $$
 - Firms with **lower market share** pass through more to consumers ($\rho_j$ closer to 1)
 - In the competitive limit ($s_j \to 0$): $\rho_j \to 1$ (full pass-through)
 
+### Product Differentiation Scenarios
+
+Products can be differentiated through the **demand side** (quality $\delta$) and/or **supply side** (cost $c$). Below we analyze different scenarios:
+
+#### Scenario 1: Symmetric/Homogeneous Products (Baseline)
+
+**Setup**: $\delta_j = \delta$ and $c_j = c$ for all $j$
+
+| Parameter | Value |
+|-----------|-------|
+| Mean utility | $\delta_j = \delta$ (identical) |
+| Marginal cost | $c_j = c$ (identical) |
+
+**Equilibrium Properties**:
+
+- All products have equal shares: $s_j = s = \frac{e^{\delta - \alpha p}}{1 + J e^{\delta - \alpha p}}$
+- All products have equal markups: $\eta_j = \eta = \frac{1}{\alpha(1-s)}$
+- All products have equal prices: $p_j = p = c + \eta$
+
+**Use case**: Theoretical benchmarks, isolating effects of $\alpha$, $J$, or ownership changes.
+
+---
+
+#### Scenario 2: Quality Differentiation Only
+
+**Setup**: $\delta_j$ varies, $c_j = c$ constant
+
+| Parameter | Value |
+|-----------|-------|
+| Mean utility | $\delta_1 < \delta_2 < \delta_3$ (quality gradient) |
+| Marginal cost | $c_j = c$ (identical) |
+
+**Example**: Digital goods, software products (zero marginal cost, quality varies)
+
+**Equilibrium Properties**:
+
+- Higher quality → higher share: $\delta_j > \delta_k \Rightarrow s_j > s_k$
+- Higher share → higher markup: $s_j > s_k \Rightarrow \eta_j > \eta_k$
+- Higher quality → higher price: $\delta_j > \delta_k \Rightarrow p_j > p_k$
+
+**Key insight**: Quality leaders charge higher prices despite identical costs because their higher market share gives them more market power.
+
+---
+
+#### Scenario 3: Cost Differentiation Only
+
+**Setup**: $\delta_j = \delta$ constant, $c_j$ varies
+
+| Parameter | Value |
+|-----------|-------|
+| Mean utility | $\delta_j = \delta$ (identical) |
+| Marginal cost | $c_1 < c_2 < c_3$ (efficiency gradient) |
+
+**Example**: Commodity markets with heterogeneous production efficiency
+
+**Equilibrium Properties**:
+
+- Lower cost → lower price: $c_j < c_k \Rightarrow p_j < p_k$
+- Lower price → higher share: $p_j < p_k \Rightarrow s_j > s_k$
+- Higher share → higher markup: $s_j > s_k \Rightarrow \eta_j > \eta_k$
+
+**Key insight**: Cost-efficient firms gain market share, which increases their markup, partially offsetting the cost advantage in prices.
+
+---
+
+#### Scenario 4: Vertical Differentiation (Quality-Cost Correlation)
+
+**Setup**: $\delta_j$ and $c_j$ positively correlated (higher quality costs more)
+
+| Parameter | Value |
+|-----------|-------|
+| Mean utility | $\delta_1 < \delta_2 < \delta_3$ |
+| Marginal cost | $c_1 < c_2 < c_3$ (correlated with $\delta$) |
+
+**Example**: Economy vs. premium cars, budget vs. luxury hotels
+
+**Equilibrium Properties**:
+
+- Price ordering follows quality: $p_1 < p_2 < p_3$
+- Share ordering depends on $(\delta_j - \alpha p_j)$: quality advantage vs. price disadvantage
+- Markup ordering: generally $\eta_1 < \eta_2 < \eta_3$ if quality effect dominates
+
+**Key insight**: Premium products charge higher prices due to both higher costs and higher markups. The price gap exceeds the cost gap.
+
+---
+
+#### Scenario 5: General Heterogeneous Products
+
+**Setup**: $\delta_j$ and $c_j$ vary independently
+
+| Parameter | Value |
+|-----------|-------|
+| Mean utility | $\delta_j$ varies (not ordered) |
+| Marginal cost | $c_j$ varies (not correlated with $\delta$) |
+
+**Example**: Diverse product markets with varied positioning
+
+**Equilibrium Properties**:
+
+- No simple ordering of prices, shares, or markups
+- Products with high $\delta$ and low $c$ are "dominant" (high share, high profit)
+- Products with low $\delta$ and high $c$ may exit or have minimal share
+
+**Comparative statics** in this scenario:
+
+| Product Type | $\delta$ | $c$ | Share | Markup | Price | Profit |
+|--------------|----------|-----|-------|--------|-------|--------|
+| Dominant | High | Low | High | High | Moderate | High |
+| Premium | High | High | Moderate | High | High | Moderate |
+| Value | Low | Low | Moderate | Low | Low | Low |
+| Weak | Low | High | Low | Low | Moderate | Very Low |
+
+---
+
+#### Summary: Sources of Product Asymmetry
+
+| Scenario | $\delta$ | $c$ | Key Driver of Price Differences |
+|----------|----------|-----|--------------------------------|
+| 1. Symmetric | Same | Same | None (benchmark) |
+| 2. Quality only | Varies | Same | Markup differences (demand side) |
+| 3. Cost only | Same | Varies | Cost differences (supply side) |
+| 4. Vertical | Correlated | Correlated | Both (premium positioning) |
+| 5. General | Independent | Independent | Complex interactions |
+
+**Implementation note**: The current solver handles all scenarios—simply pass different `delta` and `costs` vectors. The comparative statics section below demonstrates Scenario 1 (symmetric baseline). Extended analysis with heterogeneous products is marked for future implementation.
+
 ## Solution Method
 
 ### Fixed-Point Iteration on Markups
