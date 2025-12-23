@@ -13,8 +13,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-# Import from mdp_solver for shared functionality
-from mdp_solver import (
+# Import from mdp.solver for shared functionality
+from mdp.solver import (
     compute_choice_probability,
     compute_reward as _compute_reward_torch,
     compute_next_state as _compute_next_state_torch,

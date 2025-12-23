@@ -20,12 +20,12 @@ import numpy as np
 import torch
 
 # Add project paths
-sys.path.insert(0, "../../src")
-sys.path.insert(0, "../config_mdp")
-sys.path.insert(0, "../mdp_utils")
+sys.path.insert(0, "../../../src")
+sys.path.insert(0, "../config")
+sys.path.insert(0, "../../utils")
 
 # Import MDP solver
-from mdp_solver import (
+from mdp.solver import (
     build_monotonic_network,
     evaluate_network,
     compute_choice_probability,
@@ -33,7 +33,7 @@ from mdp_solver import (
 )
 
 # Import MDP simulator
-from mdp_simulator import simulate_mdp_panel
+from mdp.simulator import simulate_mdp_panel
 
 # Import configuration
 import config
@@ -79,7 +79,7 @@ print(f"  s_max = {s_max}")
 print(f"  hidden_sizes = {hidden_sizes}")
 
 # Load trained networks from solver output
-output_dir = Path("../../output/solve_mdp")
+output_dir = Path("../../../output/mdp/solve")
 
 v0_net = build_monotonic_network(hidden_sizes=hidden_sizes)
 v1_net = build_monotonic_network(hidden_sizes=hidden_sizes)
@@ -288,7 +288,7 @@ print(f"  Total observations: {panel.n_agents * panel.n_periods:,}")
 # Save simulated data for estimation
 import json
 
-sim_output_dir = Path("../../output/simulate_mdp")
+sim_output_dir = Path("../../../output/mdp/simulate")
 sim_output_dir.mkdir(parents=True, exist_ok=True)
 
 # Save panel data arrays

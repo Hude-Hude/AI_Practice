@@ -17,8 +17,8 @@ from scipy import optimize
 from dataclasses import dataclass
 from typing import Tuple, Dict, Any, Optional
 
-from mdp_solver import solve_value_function, compute_choice_probability
-from mdp_simulator import PanelData
+from mdp.solver import solve_value_function, compute_choice_probability
+from mdp.simulator import PanelData
 
 
 # =============================================================================

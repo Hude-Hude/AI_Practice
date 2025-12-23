@@ -2,7 +2,7 @@
 
 import torch
 
-from mdp_solver import (
+from mdp.solver import (
     check_convergence,
     copy_network,
     evaluate_network,

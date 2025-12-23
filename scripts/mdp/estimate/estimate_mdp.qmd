@@ -219,8 +219,8 @@ import numpy as np
 import torch
 
 # Add paths for local modules
-sys.path.insert(0, '../../src')
-sys.path.insert(0, '../config_mdp')
+sys.path.insert(0, '../../../src')
+sys.path.insert(0, '../config')
 
 # Import configuration
 from config import (
@@ -237,12 +237,12 @@ from config import (
 )
 
 # Import estimator (two-step approach)
-from mdp_estimator import estimate_two_step, TwoStepResult
-from mdp_simulator import PanelData
+from mdp.estimator import estimate_two_step, TwoStepResult
+from mdp.simulator import PanelData
 
 # Paths
-SIMULATE_OUTPUT_PATH = '../../output/simulate_mdp'
-SOLVER_OUTPUT_PATH = '../../output/solve_mdp'
+SIMULATE_OUTPUT_PATH = '../../../output/mdp/simulate'
+SOLVER_OUTPUT_PATH = '../../../output/mdp/solve'
 
 print("Setup complete.")
 print(f"True parameters: β={true_beta}, γ={true_gamma}, δ={true_delta}")
@@ -368,7 +368,7 @@ print(f"  N obs = {result.gamma_ols_details['n_obs']}")
 ```{python}
 #| label: likelihood-check
 
-from mdp_estimator import compute_log_likelihood
+from mdp.estimator import compute_log_likelihood
 import torch
 import os
 

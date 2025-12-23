@@ -14,7 +14,7 @@ Alternative methods (joint estimation, not recommended due to identification):
 - grid_search_mle: Explicit 3D grid search
 """
 
-from mdp_estimator.mdp_estimator import (
+from .mdp_estimator import (
     EstimationResult,
     TwoStepResult,
     estimate_gamma_ols,

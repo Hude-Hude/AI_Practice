@@ -5,7 +5,7 @@ with Type-I Extreme Value shocks.
 """
 
 # Import everything from the consolidated module
-from mdp_solver.mdp_solver import (
+from .mdp_solver import (
     # Type definitions
     Scalar,
     Vector,

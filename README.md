@@ -1,10 +1,19 @@
-# MDP Practice: Dynamic Discrete Choice Models
+# AI Practice: Structural Model Estimation
 
-A complete Python implementation for **solving**, **simulating**, and **estimating** Dynamic Discrete Choice (DDC) Models using neural network value iteration.
+A Python framework for **solving**, **simulating**, and **estimating** structural economic models using neural network value iteration.
 
-## Project Overview
+## Supported Models
 
-This project implements a full structural estimation pipeline for Markov Decision Processes (MDPs):
+| Model | Description | Status |
+|-------|-------------|--------|
+| **MDP** | Dynamic Discrete Choice (Markov Decision Process) | ✅ Complete |
+| **OPM** | Oligopoly Pricing Model | 🚧 Coming Soon |
+
+---
+
+## MDP: Dynamic Discrete Choice Models
+
+A complete implementation for structural estimation of MDPs:
 
 ```
 ┌─────────────────┐     ┌──────────────────┐     ┌──────────────────┐
@@ -59,35 +68,51 @@ Successfully recovers structural parameters using two-step estimation:
 ## Project Structure
 
 ```
-MDP_Practice/
+AI_Practice/
 ├── src/
-│   ├── mdp_solver/           # Neural network value iteration
-│   ├── mdp_simulator/        # Monte Carlo simulation
-│   └── mdp_estimator/        # Two-step structural estimation
+│   ├── mdp/                      # MDP model
+│   │   ├── solver/               # Neural network value iteration
+│   │   ├── simulator/            # Monte Carlo simulation
+│   │   └── estimator/            # Two-step structural estimation
+│   └── opm/                      # OPM model (placeholder)
+│       ├── solver/
+│       ├── simulator/
+│       └── estimator/
 ├── scripts/
-│   ├── config_mdp/           # Centralized parameters
-│   │   └── config.py         # β=1.0, γ=0.1, δ=0.95, etc.
-│   ├── mdp_utils/            # Shared plotting utilities
-│   ├── solve_mdp/            # Solver report with comparative statics
-│   ├── simulate_mdp/         # Simulation report with diagnostics
-│   └── estimate_mdp/         # Estimation report with identification analysis
+│   ├── mdp/
+│   │   ├── config/               # Centralized parameters (β=1.0, γ=0.1, δ=0.95)
+│   │   ├── solve/                # Solver report with comparative statics
+│   │   ├── simulate/             # Simulation report with diagnostics
+│   │   └── estimate/             # Estimation report with identification analysis
+│   ├── opm/                      # OPM scripts (placeholder)
+│   └── utils/                    # Shared plotting utilities
 ├── output/
-│   ├── solve_mdp/            # Trained networks (v0_net.pt, v1_net.pt)
-│   └── simulate_mdp/         # Panel data (states.npy, actions.npy)
-├── test/                     # Unit and integration tests
-└── docs/conversation/        # Development session logs
+│   ├── mdp/
+│   │   ├── solve/                # Trained networks (v0_net.pt, v1_net.pt)
+│   │   ├── simulate/             # Panel data (states.npy, actions.npy)
+│   │   └── estimate/
+│   └── opm/                      # OPM output (placeholder)
+├── test/
+│   ├── mdp/                      # MDP tests
+│   │   ├── solver/
+│   │   ├── simulator/
+│   │   └── estimator/
+│   └── opm/                      # OPM tests (placeholder)
+└── docs/
+    ├── mdp/                      # MDP development logs
+    └── opm/                      # OPM documentation (placeholder)
 ```
 
 ---
 
 ## Pipeline Details
 
-### 1. MDP Solver (`src/mdp_solver`)
+### 1. MDP Solver (`src/mdp/solver`)
 
 Solves the Bellman equation using neural network approximation with **target networks** for stability:
 
 ```python
-from mdp_solver import solve_value_function
+from mdp.solver import solve_value_function
 
 v0_net, v1_net, losses, n_iter = solve_value_function(
     beta=1.0, gamma=0.1, delta=0.95,
@@ -102,12 +127,12 @@ v0_net, v1_net, losses, n_iter = solve_value_function(
 - **Tanh activation**: Bounded outputs prevent explosive growth
 - **Comparative statics**: Reports analyze effects of varying β (0→2) and γ (0→0.1)
 
-### 2. MDP Simulator (`src/mdp_simulator`)
+### 2. MDP Simulator (`src/mdp/simulator`)
 
 Generates synthetic panel data using solved value functions:
 
 ```python
-from mdp_simulator import simulate_mdp_panel
+from mdp.simulator import simulate_mdp_panel
 
 panel = simulate_mdp_panel(
     v0_net, v1_net,
@@ -124,12 +149,12 @@ panel = simulate_mdp_panel(
 - Exact transition verification
 - Reward consistency
 
-### 3. MDP Estimator (`src/mdp_estimator`)
+### 3. MDP Estimator (`src/mdp/estimator`)
 
 Recovers structural parameters using **two-step estimation**:
 
 ```python
-from mdp_estimator import estimate_two_step
+from mdp.estimator import estimate_two_step
 
 result = estimate_two_step(
     data=panel,
@@ -152,7 +177,7 @@ This decomposition addresses weak identification between β and δ.
 
 ## Configuration
 
-All parameters are centralized in `scripts/config_mdp/config.py`:
+All parameters are centralized in `scripts/mdp/config/config.py`:
 
 ```python
 # Model parameters
@@ -214,6 +239,14 @@ RETURN β with highest likelihood
 ```
 
 **Optimization**: Warm-starting from pre-trained networks speeds convergence.
+
+---
+
+## OPM: Oligopoly Pricing Model
+
+🚧 **Coming Soon**
+
+The OPM module will implement structural estimation for oligopoly pricing models following the same pipeline: **Solver → Simulator → Estimator**.
 
 ---
 

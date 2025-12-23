@@ -569,12 +569,12 @@ import numpy as np
 import torch
 
 # Add project paths
-sys.path.insert(0, "../../src")
-sys.path.insert(0, "../config_mdp")
-sys.path.insert(0, "../mdp_utils")
+sys.path.insert(0, "../../../src")
+sys.path.insert(0, "../config")
+sys.path.insert(0, "../../utils")
 
 # Import MDP solver
-from mdp_solver import (
+from mdp.solver import (
     solve_value_function,
     compute_choice_probability,
     evaluate_network,
@@ -652,7 +652,7 @@ print(f"Final RMSE: {losses[-1]**0.5:.2e}")
 import json
 from pathlib import Path
 
-output_dir = Path("../../output/solve_mdp")
+output_dir = Path("../../../output/mdp/solve")
 output_dir.mkdir(parents=True, exist_ok=True)
 
 # Save config (model parameters)

@@ -17,7 +17,7 @@ import os
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
-from mdp_estimator import (
+from mdp.estimator import (
     EstimationResult,
     TwoStepResult,
     estimate_gamma_ols,
@@ -28,7 +28,7 @@ from mdp_estimator import (
     grid_search_mle,
     compute_standard_errors,
 )
-from mdp_simulator import PanelData
+from mdp.simulator import PanelData
 
 
 # =============================================================================
@@ -76,7 +76,7 @@ def true_params():
     """True structural parameters (from saved simulation config)."""
     import json
     config_path = os.path.join(
-        os.path.dirname(__file__), '..', '..', 'output', 'simulate_mdp', 'config.json'
+        os.path.dirname(__file__), '..', '..', '..', 'output', 'mdp', 'simulate', 'config.json'
     )
     with open(config_path, 'r') as f:
         config = json.load(f)
@@ -95,7 +95,7 @@ def simulated_data():
     instead of full 100x100 (10,000 observations).
     """
     data_dir = os.path.join(
-        os.path.dirname(__file__), '..', '..', 'output', 'simulate_mdp'
+        os.path.dirname(__file__), '..', '..', '..', 'output', 'mdp', 'simulate'
     )
     
     states = np.load(os.path.join(data_dir, 'states.npy'))
