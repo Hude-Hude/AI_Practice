@@ -388,6 +388,7 @@ To validate the solver:
 # Standard libraries
 import sys
 import numpy as np
+import matplotlib.pyplot as plt
 
 # Add project paths
 sys.path.insert(0, "../../../src")
@@ -404,6 +405,13 @@ from opm.solver_opm import (
 
 # Import configuration
 import config
+
+# Plot style
+plt.style.use('seaborn-v0_8-whitegrid')
+plt.rcParams['figure.figsize'] = (10, 6)
+plt.rcParams['font.size'] = 11
+plt.rcParams['axes.titlesize'] = 14
+plt.rcParams['axes.labelsize'] = 12
 
 print("Modules loaded successfully")
 ```
@@ -525,35 +533,74 @@ for j in range(J):
 
 ```{python}
 #| label: comparative-statics
+#| fig-cap: "Effect of Price Sensitivity on Equilibrium Outcomes"
 
-print("=" * 50)
-print("COMPARATIVE STATICS: EFFECT OF PRICE SENSITIVITY")
-print("=" * 50)
-print()
-print(f"{'α':<8} {'Avg Markup':<12} {'Avg Price':<12} {'Total Share':<12}")
-print("-" * 44)
+# Compute equilibrium for range of alpha values
+alpha_range = np.linspace(0.3, 3.0, 50)
+markups_alpha = []
+prices_alpha = []
+shares_alpha = []
 
-for alpha_test in [0.5, 1.0, 2.0, 5.0]:
+for alpha_test in alpha_range:
     res = solve_equilibrium_prices(
         delta=delta, alpha=alpha_test, costs=costs, ownership=ownership
     )
-    print(f"{alpha_test:<8.1f} {np.mean(res.markups):<12.4f} {np.mean(res.prices):<12.4f} {np.sum(res.shares):<12.4f}")
+    markups_alpha.append(np.mean(res.markups))
+    prices_alpha.append(np.mean(res.prices))
+    shares_alpha.append(np.sum(res.shares))
 
-print()
-print("Interpretation: Higher α → more elastic demand → lower markups")
+markups_alpha = np.array(markups_alpha)
+prices_alpha = np.array(prices_alpha)
+shares_alpha = np.array(shares_alpha)
+
+# Create figure with subplots
+fig, axes = plt.subplots(1, 3, figsize=(14, 4))
+
+# Panel A: Markup vs Alpha
+axes[0].plot(alpha_range, markups_alpha, 'b-', linewidth=2)
+axes[0].axhline(y=1/alpha, color='r', linestyle='--', alpha=0.7, label=f'Baseline (α={alpha})')
+axes[0].axvline(x=alpha, color='r', linestyle='--', alpha=0.7)
+axes[0].set_xlabel('Price Sensitivity (α)')
+axes[0].set_ylabel('Average Markup (η)')
+axes[0].set_title('A. Markup vs Price Sensitivity')
+axes[0].set_xlim(0.3, 3.0)
+
+# Panel B: Price vs Alpha
+axes[1].plot(alpha_range, prices_alpha, 'g-', linewidth=2)
+axes[1].axhline(y=costs[0], color='gray', linestyle=':', alpha=0.7, label=f'Marginal cost (c={costs[0]})')
+axes[1].axvline(x=alpha, color='r', linestyle='--', alpha=0.7)
+axes[1].set_xlabel('Price Sensitivity (α)')
+axes[1].set_ylabel('Average Price (p)')
+axes[1].set_title('B. Price vs Price Sensitivity')
+axes[1].set_xlim(0.3, 3.0)
+axes[1].legend(loc='upper right')
+
+# Panel C: Total Share vs Alpha
+axes[2].plot(alpha_range, shares_alpha, 'm-', linewidth=2)
+axes[2].axvline(x=alpha, color='r', linestyle='--', alpha=0.7)
+axes[2].set_xlabel('Price Sensitivity (α)')
+axes[2].set_ylabel('Total Inside Share')
+axes[2].set_title('C. Market Size vs Price Sensitivity')
+axes[2].set_xlim(0.3, 3.0)
+axes[2].set_ylim(0, 1)
+
+plt.tight_layout()
+plt.show()
+
+print("\nInterpretation: Higher α → more elastic demand → lower markups → lower prices → higher market share")
 ```
 
 ```{python}
 #| label: comparative-statics-competition
+#| fig-cap: "Effect of Number of Competitors on Market Outcomes"
 
-print("=" * 50)
-print("COMPARATIVE STATICS: EFFECT OF COMPETITION")
-print("=" * 50)
-print()
-print(f"{'J (products)':<15} {'Avg Markup':<12} {'Per-product Share':<18}")
-print("-" * 45)
+# Compute equilibrium for different number of competitors
+J_range = range(1, 21)
+markups_J = []
+shares_J = []
+prices_J = []
 
-for J_test in [1, 2, 3, 5, 10]:
+for J_test in J_range:
     delta_test = np.ones(J_test)
     costs_test = np.ones(J_test) * 0.5
     ownership_test = np.eye(J_test)
@@ -561,18 +608,54 @@ for J_test in [1, 2, 3, 5, 10]:
     res = solve_equilibrium_prices(
         delta=delta_test, alpha=1.0, costs=costs_test, ownership=ownership_test
     )
-    print(f"{J_test:<15} {np.mean(res.markups):<12.4f} {res.shares[0]:<18.4f}")
+    markups_J.append(np.mean(res.markups))
+    shares_J.append(res.shares[0])
+    prices_J.append(np.mean(res.prices))
 
-print()
-print("Interpretation: More competitors → lower shares → lower markups")
+markups_J = np.array(markups_J)
+shares_J = np.array(shares_J)
+prices_J = np.array(prices_J)
+
+# Create figure
+fig, axes = plt.subplots(1, 3, figsize=(14, 4))
+
+# Panel A: Markup vs J
+axes[0].plot(J_range, markups_J, 'bo-', markersize=5, linewidth=2)
+axes[0].axhline(y=1/alpha, color='r', linestyle='--', alpha=0.7, label=f'Competitive limit (1/α = {1/alpha})')
+axes[0].set_xlabel('Number of Products (J)')
+axes[0].set_ylabel('Average Markup (η)')
+axes[0].set_title('A. Markup vs Competition')
+axes[0].legend(loc='upper right')
+axes[0].set_xlim(0, 21)
+
+# Panel B: Per-product Share vs J
+axes[1].plot(J_range, shares_J, 'go-', markersize=5, linewidth=2)
+axes[1].set_xlabel('Number of Products (J)')
+axes[1].set_ylabel('Per-Product Share (s)')
+axes[1].set_title('B. Market Share vs Competition')
+axes[1].set_xlim(0, 21)
+axes[1].set_ylim(0, 0.5)
+
+# Panel C: Price vs J
+axes[2].plot(J_range, prices_J, 'mo-', markersize=5, linewidth=2)
+axes[2].axhline(y=0.5, color='gray', linestyle=':', alpha=0.7, label='Marginal cost')
+axes[2].axhline(y=0.5 + 1/alpha, color='r', linestyle='--', alpha=0.7, label='Competitive limit')
+axes[2].set_xlabel('Number of Products (J)')
+axes[2].set_ylabel('Average Price (p)')
+axes[2].set_title('C. Price vs Competition')
+axes[2].legend(loc='upper right')
+axes[2].set_xlim(0, 21)
+
+plt.tight_layout()
+plt.show()
+
+print("\nInterpretation: More competitors → lower per-product shares → lower markups → convergence to competitive pricing")
+print(f"As J → ∞: markup → 1/α = {1/alpha:.2f}, price → c + 1/α = {0.5 + 1/alpha:.2f}")
 ```
 
 ```{python}
 #| label: merger-analysis
-
-print("=" * 50)
-print("MERGER ANALYSIS")
-print("=" * 50)
+#| fig-cap: "Merger Analysis: Effect of Products 0 and 1 Merging"
 
 # Pre-merger: all independent
 ownership_pre = np.eye(J)
@@ -590,18 +673,85 @@ result_post = solve_equilibrium_prices(
     delta=delta, alpha=alpha, costs=costs, ownership=ownership_post, damping=0.5
 )
 
+# Create figure
+fig, axes = plt.subplots(1, 3, figsize=(14, 5))
+
+# Colors
+colors_pre = ['#3498db', '#3498db', '#2ecc71']  # Blue for merging, green for outsider
+colors_post = ['#e74c3c', '#e74c3c', '#27ae60']  # Red for merged, darker green for outsider
+
+products = ['Product 0\n(Merging)', 'Product 1\n(Merging)', 'Product 2\n(Outsider)']
+x = np.arange(len(products))
+width = 0.35
+
+# Panel A: Prices
+ax1 = axes[0]
+bars1 = ax1.bar(x - width/2, result_pre.prices, width, label='Pre-Merger', color=colors_pre, alpha=0.7, edgecolor='black')
+bars2 = ax1.bar(x + width/2, result_post.prices, width, label='Post-Merger', color=colors_post, alpha=0.7, edgecolor='black')
+ax1.axhline(y=costs[0], color='gray', linestyle=':', linewidth=2, label=f'Marginal Cost (c={costs[0]})')
+ax1.set_ylabel('Price')
+ax1.set_title('A. Price Changes from Merger')
+ax1.set_xticks(x)
+ax1.set_xticklabels(products)
+ax1.legend(loc='upper right')
+ax1.set_ylim(0, max(result_post.prices) * 1.2)
+
+# Add change annotations
+for i, (pre, post) in enumerate(zip(result_pre.prices, result_post.prices)):
+    change = post - pre
+    ax1.annotate(f'{change:+.3f}', xy=(i + width/2, post + 0.05), ha='center', fontsize=9, color='red' if change > 0 else 'green')
+
+# Panel B: Markups
+ax2 = axes[1]
+bars3 = ax2.bar(x - width/2, result_pre.markups, width, label='Pre-Merger', color=colors_pre, alpha=0.7, edgecolor='black')
+bars4 = ax2.bar(x + width/2, result_post.markups, width, label='Post-Merger', color=colors_post, alpha=0.7, edgecolor='black')
+ax2.set_ylabel('Markup (η = p - c)')
+ax2.set_title('B. Markup Changes from Merger')
+ax2.set_xticks(x)
+ax2.set_xticklabels(products)
+ax2.legend(loc='upper right')
+ax2.set_ylim(0, max(result_post.markups) * 1.2)
+
+# Add change annotations
+for i, (pre, post) in enumerate(zip(result_pre.markups, result_post.markups)):
+    change = post - pre
+    ax2.annotate(f'{change:+.3f}', xy=(i + width/2, post + 0.05), ha='center', fontsize=9, color='red' if change > 0 else 'green')
+
+# Panel C: Market Shares
+ax3 = axes[2]
+bars5 = ax3.bar(x - width/2, result_pre.shares, width, label='Pre-Merger', color=colors_pre, alpha=0.7, edgecolor='black')
+bars6 = ax3.bar(x + width/2, result_post.shares, width, label='Post-Merger', color=colors_post, alpha=0.7, edgecolor='black')
+ax3.set_ylabel('Market Share (s)')
+ax3.set_title('C. Market Share Changes from Merger')
+ax3.set_xticks(x)
+ax3.set_xticklabels(products)
+ax3.legend(loc='upper right')
+ax3.set_ylim(0, max(max(result_pre.shares), max(result_post.shares)) * 1.3)
+
+# Add change annotations
+for i, (pre, post) in enumerate(zip(result_pre.shares, result_post.shares)):
+    change = post - pre
+    ax3.annotate(f'{change:+.3f}', xy=(i + width/2, post + 0.01), ha='center', fontsize=9, color='red' if change > 0 else 'green')
+
+plt.tight_layout()
+plt.show()
+
+# Summary table
+print("\n" + "=" * 70)
+print("MERGER IMPACT SUMMARY")
+print("=" * 70)
+print(f"\n{'Metric':<25} {'Pre-Merger':<15} {'Post-Merger':<15} {'Change':<15}")
+print("-" * 70)
+print(f"{'Price (merged firms)':<25} {np.mean(result_pre.prices[:2]):<15.4f} {np.mean(result_post.prices[:2]):<15.4f} {np.mean(result_post.prices[:2]) - np.mean(result_pre.prices[:2]):+.4f}")
+print(f"{'Price (outsider)':<25} {result_pre.prices[2]:<15.4f} {result_post.prices[2]:<15.4f} {result_post.prices[2] - result_pre.prices[2]:+.4f}")
+print(f"{'Combined share (merged)':<25} {np.sum(result_pre.shares[:2]):<15.4f} {np.sum(result_post.shares[:2]):<15.4f} {np.sum(result_post.shares[:2]) - np.sum(result_pre.shares[:2]):+.4f}")
+print(f"{'Share (outsider)':<25} {result_pre.shares[2]:<15.4f} {result_post.shares[2]:<15.4f} {result_post.shares[2] - result_pre.shares[2]:+.4f}")
+print(f"{'Outside option share':<25} {1-np.sum(result_pre.shares):<15.4f} {1-np.sum(result_post.shares):<15.4f} {(1-np.sum(result_post.shares)) - (1-np.sum(result_pre.shares)):+.4f}")
 print()
-print("Scenario: Products 0 and 1 merge (same firm)")
-print()
-print(f"{'Metric':<20} {'Pre-Merger':<15} {'Post-Merger':<15} {'Change':<15}")
-print("-" * 65)
-print(f"{'Price (product 0)':<20} {result_pre.prices[0]:<15.4f} {result_post.prices[0]:<15.4f} {result_post.prices[0] - result_pre.prices[0]:+.4f}")
-print(f"{'Price (product 1)':<20} {result_pre.prices[1]:<15.4f} {result_post.prices[1]:<15.4f} {result_post.prices[1] - result_pre.prices[1]:+.4f}")
-print(f"{'Price (product 2)':<20} {result_pre.prices[2]:<15.4f} {result_post.prices[2]:<15.4f} {result_post.prices[2] - result_pre.prices[2]:+.4f}")
-print(f"{'Avg markup':<20} {np.mean(result_pre.markups):<15.4f} {np.mean(result_post.markups):<15.4f} {np.mean(result_post.markups) - np.mean(result_pre.markups):+.4f}")
-print()
-print("Interpretation: Merger increases prices of merging products")
-print("(firms internalize cannibalization between their own products)")
+print("Interpretation:")
+print("• Merged products raise prices → internalize cannibalization effect")
+print("• Outsider product also raises price → strategic complement effect")
+print("• Consumers shift to outside option → higher prices reduce total demand")
 ```
 
 ## Conclusion
