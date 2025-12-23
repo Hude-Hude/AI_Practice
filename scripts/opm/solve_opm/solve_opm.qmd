@@ -657,9 +657,13 @@ for j in range(J):
 
 ## Comparative Statics
 
+### Scenario 1: Symmetric/Homogeneous Products (Baseline)
+
+This baseline scenario uses identical products ($\delta_j = \delta$, $c_j = c$ for all $j$) to isolate the effects of model parameters on equilibrium outcomes.
+
 ```{python}
 #| label: comparative-statics
-#| fig-cap: "Effect of Price Sensitivity on Equilibrium Outcomes"
+#| fig-cap: "Scenario 1 (Baseline): Effect of Price Sensitivity on Equilibrium Outcomes"
 
 # Compute equilibrium for range of alpha values
 alpha_range = np.linspace(0.3, 3.0, 50)
@@ -718,7 +722,7 @@ print("\nInterpretation: Higher α → more elastic demand → lower markups →
 
 ```{python}
 #| label: comparative-statics-competition
-#| fig-cap: "Effect of Number of Competitors on Market Outcomes"
+#| fig-cap: "Scenario 1 (Baseline): Effect of Number of Competitors on Market Outcomes"
 
 # Compute equilibrium for different number of competitors
 J_range = range(1, 21)
@@ -781,7 +785,7 @@ print(f"As J → ∞: markup → 1/α = {1/alpha:.2f}, price → c + 1/α = {0.5
 
 ```{python}
 #| label: merger-analysis
-#| fig-cap: "Merger Analysis: Effect of Products 0 and 1 Merging"
+#| fig-cap: "Scenario 1 (Baseline): Symmetric Merger Analysis"
 
 # Pre-merger: all independent
 ownership_pre = np.eye(J)
@@ -1579,6 +1583,223 @@ print("• Quality Only: Price dispersion driven by markup differences")
 print("• Cost Only: Price dispersion driven by cost differences")
 print("• Vertical: Price dispersion from both cost AND markup differences")
 print("• General: Complex interactions; dominant positioning wins")
+```
+
+## Diagnosis: Evaluation Against IO Theory
+
+This section evaluates the numerical results against established Industrial Organization theory and economic intuition.
+
+```{python}
+#| label: diagnosis-markup-formula
+
+print("=" * 80)
+print("DIAGNOSIS 1: MARKUP FORMULA VERIFICATION")
+print("=" * 80)
+print()
+print("Theoretical Prediction (Logit Demand, Single-Product Firms):")
+print("  Markup: η_j = 1 / [α(1 - s_j)]")
+print("  → Lerner Index: L_j = η_j/p_j = 1 / [α(1 - s_j)p_j]")
+print()
+print("Verification across all scenarios:")
+print("-" * 80)
+print(f"{'Scenario':<25} {'Max |η - η_theory|':<20} {'Status':<15}")
+print("-" * 80)
+
+all_pass = True
+for name, data in scenarios.items():
+    res = data['result']
+    # Skip scenarios with non-diagonal ownership
+    if name == 'Symmetric (Baseline)':
+        alpha_used = alpha
+    else:
+        alpha_used = 1.0
+    
+    eta_theory = 1 / (alpha_used * (1 - res.shares))
+    max_error = np.max(np.abs(res.markups - eta_theory))
+    status = '✓ PASS' if max_error < 1e-6 else '✗ FAIL'
+    if max_error >= 1e-6:
+        all_pass = False
+    print(f"{name:<25} {max_error:<20.2e} {status:<15}")
+
+print("-" * 80)
+print(f"Overall: {'✓ All scenarios match theory' if all_pass else '✗ Some scenarios fail'}")
+```
+
+```{python}
+#| label: diagnosis-comparative-statics
+
+print()
+print("=" * 80)
+print("DIAGNOSIS 2: COMPARATIVE STATICS CONSISTENCY")
+print("=" * 80)
+print()
+print("Theoretical Predictions from IO Literature:")
+print()
+
+# Test 1: Higher α → lower markups
+print("Test 1: ∂η/∂α < 0 (Higher price sensitivity → lower markups)")
+alpha_test_vals = [0.5, 1.0, 2.0]
+markups_by_alpha = []
+for a in alpha_test_vals:
+    res = solve_equilibrium_prices(delta, a, costs, ownership)
+    markups_by_alpha.append(np.mean(res.markups))
+decreasing = all(markups_by_alpha[i] > markups_by_alpha[i+1] for i in range(len(markups_by_alpha)-1))
+print(f"  α = {alpha_test_vals} → η = {[f'{m:.3f}' for m in markups_by_alpha]}")
+print(f"  Monotonically decreasing: {'✓ YES' if decreasing else '✗ NO'}")
+print()
+
+# Test 2: More competitors → lower markups
+print("Test 2: ∂η/∂J < 0 (More competitors → lower markups)")
+J_test_vals = [2, 5, 10]
+markups_by_J = []
+for J_t in J_test_vals:
+    res = solve_equilibrium_prices(np.ones(J_t), 1.0, np.ones(J_t)*0.5, np.eye(J_t))
+    markups_by_J.append(np.mean(res.markups))
+decreasing_J = all(markups_by_J[i] > markups_by_J[i+1] for i in range(len(markups_by_J)-1))
+print(f"  J = {J_test_vals} → η = {[f'{m:.3f}' for m in markups_by_J]}")
+print(f"  Monotonically decreasing: {'✓ YES' if decreasing_J else '✗ NO'}")
+print()
+
+# Test 3: Competitive limit
+print("Test 3: lim(J→∞) η = 1/α (Competitive limit)")
+J_large = 50
+res_large = solve_equilibrium_prices(np.ones(J_large), 1.0, np.ones(J_large)*0.5, np.eye(J_large))
+eta_limit = np.mean(res_large.markups)
+eta_theory_limit = 1.0  # 1/α with α=1
+print(f"  J = {J_large}: η = {eta_limit:.4f}, theory = 1/α = {eta_theory_limit:.4f}")
+print(f"  Close to limit: {'✓ YES' if abs(eta_limit - eta_theory_limit) < 0.1 else '✗ NO'}")
+print()
+
+# Test 4: Merger increases prices
+print("Test 4: Merger → higher prices (Internalization of cannibalization)")
+print(f"  Pre-merger prices:  {result_pre.prices}")
+print(f"  Post-merger prices: {result_post.prices}")
+prices_increased = all(result_post.prices >= result_pre.prices - 1e-6)
+print(f"  All prices weakly increase: {'✓ YES' if prices_increased else '✗ NO'}")
+```
+
+```{python}
+#| label: diagnosis-economic-intuition
+
+print()
+print("=" * 80)
+print("DIAGNOSIS 3: ECONOMIC INTUITION CHECKS")
+print("=" * 80)
+print()
+
+# Intuition 1: Quality Premium
+print("Intuition 1: Higher quality → higher price (Quality Premium)")
+print("  Scenario 2 (Quality Only):")
+for j, label in enumerate(['Low', 'Medium', 'High']):
+    print(f"    {label} quality (δ={delta_quality[j]}): p = {result_quality.prices[j]:.4f}")
+quality_premium = result_quality.prices[2] > result_quality.prices[1] > result_quality.prices[0]
+print(f"  Price ordering matches quality ordering: {'✓ YES' if quality_premium else '✗ NO'}")
+print()
+
+# Intuition 2: Cost Pass-Through < 100%
+print("Intuition 2: Cost pass-through < 100% (Firms absorb some cost changes)")
+print("  Scenario 3 (Cost Only):")
+cost_diff = costs_cost[2] - costs_cost[0]
+price_diff = result_cost.prices[2] - result_cost.prices[0]
+passthrough = price_diff / cost_diff
+print(f"    Cost difference (Inefficient - Efficient): {cost_diff:.2f}")
+print(f"    Price difference: {price_diff:.4f}")
+print(f"    Implied pass-through: {passthrough:.2%}")
+print(f"  Pass-through < 100%: {'✓ YES' if passthrough < 1 else '✗ NO'}")
+print()
+
+# Intuition 3: Vertical differentiation price gap > cost gap
+print("Intuition 3: Premium price gap > cost gap (Premium markup effect)")
+print("  Scenario 4 (Vertical):")
+cost_gap_vert = costs_vert[2] - costs_vert[0]
+price_gap_vert = result_vert.prices[2] - result_vert.prices[0]
+markup_gap_vert = result_vert.markups[2] - result_vert.markups[0]
+print(f"    Cost gap (Premium - Economy): {cost_gap_vert:.2f}")
+print(f"    Price gap: {price_gap_vert:.4f}")
+print(f"    Markup gap: {markup_gap_vert:.4f}")
+print(f"  Price gap > Cost gap: {'✓ YES' if price_gap_vert > cost_gap_vert else '✗ NO'}")
+print()
+
+# Intuition 4: Dominant firm has highest profit
+print("Intuition 4: Dominant positioning (high δ, low c) → highest profit")
+print("  Scenario 5 (General):")
+profits_gen = result_gen.shares * result_gen.markups
+for j, label in enumerate(['Dominant', 'Weak', 'Average']):
+    print(f"    {label}: δ={delta_gen[j]}, c={costs_gen[j]} → profit ∝ {profits_gen[j]:.4f}")
+dominant_wins = profits_gen[0] > profits_gen[1] and profits_gen[0] > profits_gen[2]
+print(f"  Dominant has highest profit: {'✓ YES' if dominant_wins else '✗ NO'}")
+```
+
+```{python}
+#| label: diagnosis-summary
+
+print()
+print("=" * 80)
+print("DIAGNOSIS SUMMARY: IO THEORY CONSISTENCY")
+print("=" * 80)
+print()
+
+checks = [
+    ("Markup formula η = 1/[α(1-s)]", all_pass),
+    ("∂η/∂α < 0 (price sensitivity)", decreasing),
+    ("∂η/∂J < 0 (competition)", decreasing_J),
+    ("lim(J→∞) η → 1/α", abs(eta_limit - eta_theory_limit) < 0.1),
+    ("Merger raises prices", prices_increased),
+    ("Quality → Price premium", quality_premium),
+    ("Cost pass-through < 100%", passthrough < 1),
+    ("Premium price gap > cost gap", price_gap_vert > cost_gap_vert),
+    ("Dominant firm highest profit", dominant_wins),
+]
+
+print(f"{'Check':<45} {'Result':<10}")
+print("-" * 55)
+passed = 0
+for check, result in checks:
+    status = '✓ PASS' if result else '✗ FAIL'
+    if result:
+        passed += 1
+    print(f"{check:<45} {status:<10}")
+print("-" * 55)
+print(f"Total: {passed}/{len(checks)} checks passed")
+print()
+
+if passed == len(checks):
+    print("✓ ALL THEORETICAL PREDICTIONS VERIFIED")
+    print("  The solver correctly implements Bertrand-Nash equilibrium")
+    print("  with logit demand and produces results consistent with IO theory.")
+else:
+    print("⚠ SOME CHECKS FAILED - Review implementation")
+```
+
+```{python}
+#| label: diagnosis-references
+
+print()
+print("=" * 80)
+print("THEORETICAL REFERENCES")
+print("=" * 80)
+print()
+print("Key Results Verified:")
+print()
+print("1. Markup Formula (Berry, 1994; Nevo, 2001)")
+print("   η_j = 1/[α(1-s_j)] for single-product firms with logit demand")
+print("   Source: First-order condition of profit maximization")
+print()
+print("2. Competitive Limit (Tirole, 1988)")
+print("   As J → ∞, s_j → 0, so η_j → 1/α")
+print("   Interpretation: Perfect competition eliminates market power")
+print()
+print("3. Merger Effects (Werden & Froeb, 1994)")
+print("   Horizontal merger internalizes cannibalization between products")
+print("   Results in higher prices for merged products and competitors")
+print()
+print("4. Pass-Through (Weyl & Fabinger, 2013)")
+print("   With logit demand: ρ = 1 - s < 1")
+print("   Higher market share → lower pass-through (absorb more cost)")
+print()
+print("5. Vertical Differentiation (Shaked & Sutton, 1982)")
+print("   Quality leaders charge premium beyond cost difference")
+print("   Premium includes both cost and markup components")
 ```
 
 ## Conclusion
