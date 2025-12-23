@@ -40,6 +40,30 @@ Before expensive: `pipeline-test` (100) → verify S3 → `pipeline-release` (10
 
 ---
 
+## 📓 QUARTO WORKFLOW
+
+```
+MATH → PSEUDOCODE → IMPLEMENT → TEST → REPORT
+```
+
+1. Define model equations, formulas
+2. Write algorithm pseudocode
+3. Implement in `src/` modules
+4. Validate with diagnostics
+5. Display in Quarto report
+
+---
+
+## 📦 STAGE ORDER
+
+```
+config → solve → simulate → estimate
+```
+
+Each stage consumes previous stage's output.
+
+---
+
 ## 🔧 REFACTORING
 
 1. Grep ALL old names
@@ -114,6 +138,9 @@ Code "WRONG" → Delete
 3. **Reproducibility** - Stable paths, DRY
 4. **Trust user** - Follow exactly
 5. **Test first** - Before claiming done, before expensive compute
+6. **Scaffolds = contracts** - Fill in, don't restructure
+7. **Math before code** - Equations precede implementation
+8. **Notebooks call modules** - Business logic in `src/`, not `.qmd`
 
 ---
 
