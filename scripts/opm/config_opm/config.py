@@ -66,6 +66,10 @@ max_iterations = 1000
 # SIMULATION PARAMETERS
 # =============================================================================
 
+# Which scenario to use as baseline for simulation
+# Options: "baseline", "quality", "cost", "vertical", "general"
+simulation_scenario = "baseline"
+
 # Number of market draws for Monte Carlo simulation
 n_markets = 1000
 
@@ -185,6 +189,7 @@ if __name__ == "__main__":
     print(f"  Max iterations: {max_iterations}")
     print()
     print("Simulation Parameters:")
+    print(f"  Scenario: {simulation_scenario}")
     print(f"  Number of markets (M): {n_markets}")
     print(f"  Demand shock std (σ_ξ): {sigma_xi}")
     print(f"  Cost shock std (σ_ω): {sigma_omega}")
