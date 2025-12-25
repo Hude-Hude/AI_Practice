@@ -85,7 +85,49 @@ def compute_pass_through(share: float) -> float:
 
 
 # =============================================================================
-# ALTERNATIVE CONFIGURATIONS
+# SCENARIO CONFIGURATIONS
+# =============================================================================
+
+SCENARIOS = {
+    "baseline": {
+        "delta": np.array([1.0, 1.0, 1.0]),
+        "costs": np.array([0.5, 0.5, 0.5]),
+        "ownership": np.eye(3),
+        "alpha": 1.0,
+        "description": "Symmetric/homogeneous products",
+    },
+    "quality": {
+        "delta": np.array([0.5, 1.0, 2.0]),
+        "costs": np.array([0.5, 0.5, 0.5]),
+        "ownership": np.eye(3),
+        "alpha": 1.0,
+        "description": "Quality differentiation only (δ varies, c constant)",
+    },
+    "cost": {
+        "delta": np.array([1.0, 1.0, 1.0]),
+        "costs": np.array([0.3, 0.5, 0.7]),
+        "ownership": np.eye(3),
+        "alpha": 1.0,
+        "description": "Cost differentiation only (δ constant, c varies)",
+    },
+    "vertical": {
+        "delta": np.array([0.5, 1.0, 2.0]),
+        "costs": np.array([0.3, 0.5, 0.8]),
+        "ownership": np.eye(3),
+        "alpha": 1.0,
+        "description": "Vertical differentiation (δ and c positively correlated)",
+    },
+    "general": {
+        "delta": np.array([2.0, 0.5, 1.0]),
+        "costs": np.array([0.3, 0.7, 0.5]),
+        "ownership": np.eye(3),
+        "alpha": 1.0,
+        "description": "General heterogeneous products (δ and c independent)",
+    },
+}
+
+# =============================================================================
+# ALTERNATIVE OWNERSHIP STRUCTURES
 # =============================================================================
 
 def get_monopoly_ownership(J: int = J) -> np.ndarray:

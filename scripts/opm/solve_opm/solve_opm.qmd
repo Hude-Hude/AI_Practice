@@ -890,11 +890,12 @@ print("• Consumers shift to outside option → higher prices reduce total dema
 #| label: quality-differentiation-setup
 #| fig-cap: "Scenario 2: Quality Differentiation (δ varies, c constant)"
 
-# Setup: Three products with different quality levels, same cost
-delta_quality = np.array([0.5, 1.0, 2.0])  # Low, Medium, High quality
-costs_quality = np.array([0.5, 0.5, 0.5])  # Same marginal cost
-ownership_quality = np.eye(3)  # Single-product firms
-alpha_quality = 1.0
+# Load scenario from config (DRY principle)
+sc_quality = config.SCENARIOS["quality"]
+delta_quality = sc_quality["delta"]
+costs_quality = sc_quality["costs"]
+ownership_quality = sc_quality["ownership"]
+alpha_quality = sc_quality["alpha"]
 
 # Solve equilibrium
 result_quality = solve_equilibrium_prices(
@@ -1191,11 +1192,12 @@ print("• Consumers harmed: higher prices, some switch to outside option")
 #| label: cost-differentiation-setup
 #| fig-cap: "Scenario 3: Cost Differentiation (δ constant, c varies)"
 
-# Setup: Three products with same quality, different costs
-delta_cost = np.array([1.0, 1.0, 1.0])  # Same quality
-costs_cost = np.array([0.3, 0.5, 0.7])  # Low, Medium, High cost
-ownership_cost = np.eye(3)
-alpha_cost = 1.0
+# Load scenario from config (DRY principle)
+sc_cost = config.SCENARIOS["cost"]
+delta_cost = sc_cost["delta"]
+costs_cost = sc_cost["costs"]
+ownership_cost = sc_cost["ownership"]
+alpha_cost = sc_cost["alpha"]
 
 # Solve equilibrium
 result_cost = solve_equilibrium_prices(
@@ -1287,11 +1289,12 @@ print(f"  → Efficient firm captures some cost advantage as profit")
 #| label: vertical-differentiation-setup
 #| fig-cap: "Scenario 4: Vertical Differentiation (δ and c positively correlated)"
 
-# Setup: Higher quality costs more to produce
-delta_vert = np.array([0.5, 1.0, 2.0])  # Low, Medium, High quality
-costs_vert = np.array([0.3, 0.5, 0.8])  # Low, Medium, High cost (correlated)
-ownership_vert = np.eye(3)
-alpha_vert = 1.0
+# Load scenario from config (DRY principle)
+sc_vert = config.SCENARIOS["vertical"]
+delta_vert = sc_vert["delta"]
+costs_vert = sc_vert["costs"]
+ownership_vert = sc_vert["ownership"]
+alpha_vert = sc_vert["alpha"]
 
 # Solve equilibrium
 result_vert = solve_equilibrium_prices(
@@ -1392,14 +1395,15 @@ print("also have higher markups (due to higher market share → more market powe
 #| label: general-heterogeneous-setup
 #| fig-cap: "Scenario 5: General Heterogeneous Products (δ and c vary independently)"
 
-# Setup: Quality and cost vary independently
+# Load scenario from config (DRY principle)
 # Product A: High quality, Low cost (Dominant)
 # Product B: Low quality, High cost (Weak)
 # Product C: Medium quality, Medium cost (Average)
-delta_gen = np.array([2.0, 0.5, 1.0])  # High, Low, Medium quality
-costs_gen = np.array([0.3, 0.7, 0.5])  # Low, High, Medium cost
-ownership_gen = np.eye(3)
-alpha_gen = 1.0
+sc_gen = config.SCENARIOS["general"]
+delta_gen = sc_gen["delta"]
+costs_gen = sc_gen["costs"]
+ownership_gen = sc_gen["ownership"]
+alpha_gen = sc_gen["alpha"]
 
 # Solve equilibrium
 result_gen = solve_equilibrium_prices(
