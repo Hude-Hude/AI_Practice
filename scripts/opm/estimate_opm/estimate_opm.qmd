@@ -1,26 +1,388 @@
 ---
-title: "Problem: Estimate the Static Oligopoly Pricing Model"
+title: "Structural Estimation for Static Oligopoly Pricing"
+subtitle: "Demand Estimation (GMM) and Cost Recovery"
 format:
   html:
-    toc: false
-    code-fold: false
+    toc: true
+    toc-depth: 3
+    code-fold: true
 jupyter: python3
 execute:
-  echo: false
+  echo: true
   warning: false
 ---
 
-## Goal
+## Instruction
 
-Define the estimation exercise that mirrors `scripts/estimate_mdp/estimate_mdp.qmd`, but now focuses on recovering demand and cost primitives of the static oligopoly pricing model using the simulated market outcomes generated in `problems/simulate_opm/simulate_opm.qmd`.
+::: {.callout-note}
+### Original Problem Statement
 
-## Required Components
+This section contains the original instructional content defining the estimation exercise.
+:::
+
+### Goal
+
+Define the estimation exercise that mirrors `scripts/estimate_mdp/estimate_mdp.qmd`, but now focuses on recovering demand and cost primitives of the static oligopoly pricing model using the simulated market outcomes generated in `scripts/opm/simulate_opm/simulate_opm.qmd`.
+
+### Required Components
 
 1. **Data ingestion**: Outline how trainees should load simulated datasets (prices, quantities, instruments, cost shifters) and configuration metadata.
 2. **Estimation strategy**: Specify a two-step procedure—(i) back out demand shocks from the share equations and estimate demand parameters using GMM, (ii) back out marginal costs from the first-order conditions and estimate the cost parameters by a regression.
 3. **Model validation**: Require fit diagnostics, comparison between recovered and true shocks in demand and cost. The shape of the GMM objective function around the true parameter along each dimension.
 
-## Deliverable
+### Deliverable
 
 An executable Quarto report (to be implemented by juniors) and rendered html report that mirrors the flow of the MDP estimator, but focuses solely on static oligopoly market simulations. Juniors will fill in all code, figures, and tables.
 
+---
+
+## Estimation Design
+
+### Overview
+
+The estimation problem is to recover the structural parameters of the oligopoly pricing model from observed market data. We observe:
+
+- **Prices**: $p_{jm}$ for product $j$ in market $m$
+- **Market shares**: $s_{jm}$ for product $j$ in market $m$
+- **Product characteristics**: $\bar{\delta}_j$ (baseline mean utilities)
+- **Cost shifters**: $\bar{c}_j$ (baseline marginal costs)
+
+We seek to recover:
+
+- **Demand parameter**: $\alpha$ (price sensitivity)
+- **Demand shocks**: $\xi_{jm}$ (unobserved product quality)
+- **Cost shocks**: $\omega_{jm}$ (unobserved cost variation)
+
+### Model Structure
+
+#### Demand Side
+
+The logit demand model gives market shares:
+$$
+s_{jm} = \frac{\exp(\delta_{jm} - \alpha p_{jm})}{1 + \sum_{k=1}^{J} \exp(\delta_{km} - \alpha p_{km})}
+$$
+
+where the mean utility decomposes as:
+$$
+\delta_{jm} = \bar{\delta}_j + \xi_{jm}
+$$
+
+- $\bar{\delta}_j$: baseline mean utility (observed/known from config)
+- $\xi_{jm}$: demand shock (unobserved, to be recovered)
+
+#### Supply Side
+
+From profit maximization, the first-order conditions give:
+$$
+p_{jm} = c_{jm} + \eta_{jm}
+$$
+
+where:
+$$
+\eta_{jm} = \frac{1}{\alpha(1 - s_{jm})}
+$$
+
+Marginal costs decompose as:
+$$
+c_{jm} = \bar{c}_j + \omega_{jm}
+$$
+
+- $\bar{c}_j$: baseline marginal cost (observed/known from config)
+- $\omega_{jm}$: cost shock (unobserved, to be recovered)
+
+### Identification Strategy
+
+#### The Endogeneity Problem
+
+Prices are **endogenous**: firms observe demand shocks $\xi_{jm}$ and set prices accordingly. This creates correlation:
+$$
+\text{Cov}(p_{jm}, \xi_{jm}) \neq 0
+$$
+
+Naive regression of shares on prices yields biased estimates of $\alpha$.
+
+#### Instrumental Variables
+
+We need instruments $Z_{jm}$ that satisfy:
+
+1. **Relevance**: $\text{Cov}(Z_{jm}, p_{jm}) \neq 0$
+2. **Exogeneity**: $\text{Cov}(Z_{jm}, \xi_{jm}) = 0$
+
+**BLP-style instruments** (characteristics of competing products):
+
+- Sum of competitors' characteristics: $Z_{jm}^{BLP} = \sum_{k \neq j} x_{km}$
+- Rationale: Other products' characteristics affect equilibrium prices (relevance) but are uncorrelated with own demand shocks (exogeneity)
+
+**Cost shifters** (excluded from demand):
+
+- Variables that affect costs but not utility directly
+- E.g., input prices, distance to suppliers
+
+#### Our Setting (Simulation)
+
+In our simulation:
+
+- We **know** the true $\alpha$ (can verify recovery)
+- We **know** the true shocks $\xi_{jm}, \omega_{jm}$ (can validate)
+- Cost shocks $\omega_{jm}$ serve as natural instruments (affect prices, uncorrelated with demand shocks by construction)
+
+### Two-Step Estimation Procedure
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                   TWO-STEP ESTIMATION                           │
+├─────────────────────────────────────────────────────────────────┤
+│  STEP 1: Demand Estimation (GMM)                                │
+│          • Berry inversion: recover δ from shares               │
+│          • Compute demand shocks: ξ = δ - δ̄                     │
+│          • GMM: find α that makes E[Z'ξ] = 0                    │
+├─────────────────────────────────────────────────────────────────┤
+│  STEP 2: Cost Recovery                                          │
+│          • Use estimated α̂ to compute markups                   │
+│          • Back out costs: c = p - η                            │
+│          • Recover cost shocks: ω = c - c̄                       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Algorithm: Pseudocode
+
+#### Step 1: Berry Inversion
+
+```
+FUNCTION BERRY_INVERSION(shares, outside_share):
+    """
+    Invert market shares to recover mean utilities.
+    
+    For logit demand without random coefficients:
+        ln(s_j) - ln(s_0) = δ_j - α*p_j
+    
+    Since we want δ_j (including the -αp term absorbed):
+        δ_j = ln(s_j) - ln(s_0)
+    
+    This is the "observed" mean utility that rationalizes shares.
+    """
+    
+    INPUT:
+      shares       : Matrix[M, J]    # Market shares s_jm
+      outside_share: Vector[M]       # Outside option share s_0m = 1 - Σ_j s_jm
+    
+    OUTPUT:
+      delta        : Matrix[M, J]    # Mean utilities δ_jm
+    
+    PROCEDURE:
+      FOR m = 1 TO M:
+        s_0m = outside_share[m]
+        FOR j = 1 TO J:
+          delta[m, j] = ln(shares[m, j]) - ln(s_0m)
+      
+      RETURN delta
+```
+
+#### Step 1: GMM Estimation of α
+
+```
+FUNCTION ESTIMATE_ALPHA_GMM(prices, shares, delta_bar, instruments):
+    """
+    Estimate price sensitivity α via GMM.
+    
+    Model: δ_jm = δ̄_j + ξ_jm  (mean utility)
+           δ_jm^obs = ln(s_jm) - ln(s_0m) = δ̄_j - α*p_jm + ξ_jm
+    
+    Rearranging:
+           ξ_jm = δ_jm^obs - δ̄_j + α*p_jm
+    
+    Moment condition: E[Z_jm * ξ_jm] = 0
+    
+    GMM objective: Q(α) = ξ(α)' Z (Z'Z)^{-1} Z' ξ(α)
+    """
+    
+    INPUT:
+      prices     : Matrix[M, J]    # Observed prices p_jm
+      shares     : Matrix[M, J]    # Observed shares s_jm
+      delta_bar  : Vector[J]       # Baseline mean utilities δ̄_j
+      instruments: Matrix[M*J, K]  # Instruments Z
+    
+    OUTPUT:
+      alpha_hat  : Scalar          # Estimated price sensitivity
+      xi_hat     : Matrix[M, J]    # Recovered demand shocks
+    
+    PROCEDURE:
+      # Berry inversion
+      outside_share = 1 - sum(shares, axis=1)
+      delta_obs = BERRY_INVERSION(shares, outside_share)
+      
+      # GMM objective function
+      FUNCTION gmm_objective(alpha):
+        # Compute demand shocks
+        xi = delta_obs - delta_bar + alpha * prices
+        xi_vec = xi.flatten()
+        
+        # Moment conditions
+        moments = Z' * xi_vec
+        
+        # GMM criterion (2-step efficient: W = (Z'Z)^{-1})
+        W = inv(Z' * Z)
+        Q = moments' * W * moments
+        
+        RETURN Q
+      
+      # Minimize GMM objective
+      alpha_hat = argmin_{alpha} gmm_objective(alpha)
+      
+      # Recover demand shocks at estimated α
+      xi_hat = delta_obs - delta_bar + alpha_hat * prices
+      
+      RETURN alpha_hat, xi_hat
+```
+
+#### Step 2: Cost Recovery
+
+```
+FUNCTION RECOVER_COSTS(prices, shares, alpha_hat, costs_bar, ownership):
+    """
+    Back out marginal costs from FOC.
+    
+    FOC: p_j = c_j + η_j
+    where η_j = 1/(α(1-s_j)) for single-product firms
+    
+    Therefore: c_j = p_j - η_j
+    Cost shock: ω_j = c_j - c̄_j
+    """
+    
+    INPUT:
+      prices    : Matrix[M, J]    # Observed prices
+      shares    : Matrix[M, J]    # Observed shares
+      alpha_hat : Scalar          # Estimated α
+      costs_bar : Vector[J]       # Baseline costs c̄_j
+      ownership : Matrix[J, J]    # Ownership matrix Ω
+    
+    OUTPUT:
+      costs_hat : Matrix[M, J]    # Recovered marginal costs
+      omega_hat : Matrix[M, J]    # Recovered cost shocks
+      markups   : Matrix[M, J]    # Implied markups
+    
+    PROCEDURE:
+      FOR m = 1 TO M:
+        # Compute markups from FOC
+        FOR j = 1 TO J:
+          markups[m, j] = 1 / (alpha_hat * (1 - shares[m, j]))
+        
+        # Back out costs
+        costs_hat[m] = prices[m] - markups[m]
+        
+        # Recover cost shocks
+        omega_hat[m] = costs_hat[m] - costs_bar
+      
+      RETURN costs_hat, omega_hat, markups
+```
+
+### Complete Estimation Algorithm
+
+```
+ALGORITHM: ESTIMATE_OPM
+────────────────────────
+INPUT:
+  prices     : Matrix[M, J]    # Observed equilibrium prices
+  shares     : Matrix[M, J]    # Observed market shares
+  delta_bar  : Vector[J]       # Baseline mean utilities (from config)
+  costs_bar  : Vector[J]       # Baseline marginal costs (from config)
+  ownership  : Matrix[J, J]    # Ownership structure (from config)
+  instruments: Matrix[M*J, K]  # Instruments for GMM
+
+OUTPUT:
+  EstimationResult containing:
+    - alpha_hat : Scalar         # Estimated price sensitivity
+    - xi_hat    : Matrix[M, J]   # Recovered demand shocks
+    - omega_hat : Matrix[M, J]   # Recovered cost shocks
+    - costs_hat : Matrix[M, J]   # Recovered marginal costs
+
+PROCEDURE:
+  # ─────────────────────────────────────────────
+  # STEP 1: DEMAND ESTIMATION (GMM)
+  # ─────────────────────────────────────────────
+  
+  # 1a. Berry inversion
+  outside_share = 1 - rowsum(shares)
+  delta_obs = ln(shares) - ln(outside_share)  # element-wise
+  
+  # 1b. GMM estimation
+  alpha_hat, xi_hat = ESTIMATE_ALPHA_GMM(
+      prices, shares, delta_bar, instruments
+  )
+  
+  # ─────────────────────────────────────────────
+  # STEP 2: COST RECOVERY
+  # ─────────────────────────────────────────────
+  
+  costs_hat, omega_hat, markups = RECOVER_COSTS(
+      prices, shares, alpha_hat, costs_bar, ownership
+  )
+  
+  RETURN EstimationResult(alpha_hat, xi_hat, omega_hat, costs_hat)
+```
+
+### Diagnostics and Validation
+
+#### Parameter Recovery
+
+| Check | Description | Expected |
+|-------|-------------|----------|
+| α recovery | Compare $\hat{\alpha}$ to true $\alpha$ | Bias < 5% |
+| Standard error | Asymptotic SE from GMM | Covers true value |
+
+#### Shock Recovery
+
+| Check | Description | Expected |
+|-------|-------------|----------|
+| Demand shocks | Correlation($\hat{\xi}$, true $\xi$) | > 0.95 |
+| Cost shocks | Correlation($\hat{\omega}$, true $\omega$) | > 0.99 |
+| Mean recovery | Mean($\hat{\xi}$) ≈ 0, Mean($\hat{\omega}$) ≈ 0 | Near zero |
+
+#### GMM Diagnostics
+
+| Check | Description | Expected |
+|-------|-------------|----------|
+| J-statistic | Overidentification test | p > 0.05 |
+| Objective surface | GMM objective around $\hat{\alpha}$ | Clear minimum |
+| First-stage F | Instrument strength | F > 10 |
+
+#### Economic Validity
+
+| Check | Description | Expected |
+|-------|-------------|----------|
+| Markups positive | All $\hat{\eta}_{jm} > 0$ | ✓ |
+| Costs positive | All $\hat{c}_{jm} > 0$ | ✓ |
+| FOC satisfied | $p = c + \eta$ holds | ✓ |
+
+### Outputs
+
+The estimator produces:
+
+1. **Parameter estimates**: $\hat{\alpha}$ with standard errors
+2. **Recovered shocks**: $\hat{\xi}_{jm}$, $\hat{\omega}_{jm}$ for all markets
+3. **Implied costs**: $\hat{c}_{jm}$ for all markets
+4. **Diagnostics**: GMM objective, J-statistic, correlation with true values
+
+---
+
+## Implementation
+
+*To be implemented: Setup, data loading, estimation, results, diagnostics.*
+
+---
+
+## Results
+
+*To be implemented: Parameter estimates, shock recovery, validation tables.*
+
+---
+
+## Diagnostics
+
+*To be implemented: GMM objective surface, shock correlations, economic checks.*
+
+---
+
+## Conclusion
+
+*To be implemented: Summary of findings, comparison to true parameters.*
