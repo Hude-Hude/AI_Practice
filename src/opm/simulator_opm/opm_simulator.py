@@ -54,6 +54,14 @@ class SimulationResult:
         Number of markets simulated
     n_products : int
         Number of products (J)
+    xi : np.ndarray
+        Demand shocks, shape (n_markets, J)
+    omega : np.ndarray
+        Cost shocks, shape (n_markets, J)
+    delta : np.ndarray
+        Realized mean utilities (delta_bar + xi), shape (n_markets, J)
+    costs : np.ndarray
+        Realized marginal costs (costs_bar + omega), shape (n_markets, J)
     """
 
     prices: Matrix
@@ -63,6 +71,10 @@ class SimulationResult:
     foc_errors: Vector
     n_markets: int
     n_products: int
+    xi: Matrix
+    omega: Matrix
+    delta: Matrix
+    costs: Matrix
 
 
 # =============================================================================
@@ -136,6 +148,12 @@ def simulate_opm_markets(
     markups = np.zeros((n_markets, J))
     converged = np.zeros(n_markets, dtype=bool)
     foc_errors = np.zeros(n_markets)
+    
+    # Storage for shocks and realized parameters
+    xi_all = np.zeros((n_markets, J))
+    omega_all = np.zeros((n_markets, J))
+    delta_all = np.zeros((n_markets, J))
+    costs_all = np.zeros((n_markets, J))
 
     # Simulate each market
     for m in range(n_markets):
@@ -146,6 +164,12 @@ def simulate_opm_markets(
         # Draw cost shocks
         omega_m = np.random.normal(loc=0, scale=sigma_omega, size=J)
         costs_m = costs_bar + omega_m
+        
+        # Store shocks and realized parameters
+        xi_all[m] = xi_m
+        omega_all[m] = omega_m
+        delta_all[m] = delta_m
+        costs_all[m] = costs_m
 
         # Solve equilibrium for this market
         result_m = solve_equilibrium_prices(
@@ -178,5 +202,9 @@ def simulate_opm_markets(
         foc_errors=foc_errors,
         n_markets=n_markets,
         n_products=J,
+        xi=xi_all,
+        omega=omega_all,
+        delta=delta_all,
+        costs=costs_all,
     )
 

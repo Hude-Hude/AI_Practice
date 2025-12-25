@@ -85,6 +85,35 @@ sigma_omega = 0.2
 simulation_seed = 42
 
 # =============================================================================
+# ESTIMATION PARAMETERS
+# =============================================================================
+
+# Alpha search bounds for GMM estimation
+# Should bracket the true alpha values across scenarios (1.0 to 2.0)
+alpha_bounds = (0.1, 5.0)
+
+# Number of grid points for alpha search (if using grid search)
+alpha_n_points = 50
+
+# GMM optimization tolerance
+gmm_tolerance = 1e-8
+
+# Instrument type for demand estimation
+# "cost_shocks": Use cost shocks (omega) as instruments
+#   - Valid because omega ⊥ xi by construction in simulation
+#   - Relevant because omega affects prices through costs
+# "blp": Use BLP-style instruments (sum of other products' characteristics)
+instrument_type = "cost_shocks"
+
+# Standard error method
+# "hessian": Numerical Hessian of GMM objective
+# "bootstrap": Bootstrap standard errors (slower but more robust)
+se_method = "hessian"
+
+# Number of bootstrap replications (if se_method = "bootstrap")
+n_bootstrap = 200
+
+# =============================================================================
 # ANALYTICAL BENCHMARKS
 # =============================================================================
 
@@ -194,4 +223,11 @@ if __name__ == "__main__":
     print(f"  Demand shock std (σ_ξ): {sigma_xi}")
     print(f"  Cost shock std (σ_ω): {sigma_omega}")
     print(f"  Random seed: {simulation_seed}")
+    print()
+    print("Estimation Parameters:")
+    print(f"  Alpha bounds: {alpha_bounds}")
+    print(f"  Alpha grid points: {alpha_n_points}")
+    print(f"  GMM tolerance: {gmm_tolerance}")
+    print(f"  Instrument type: {instrument_type}")
+    print(f"  SE method: {se_method}")
 

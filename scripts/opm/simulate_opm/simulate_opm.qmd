@@ -350,6 +350,87 @@ print()
 print("All simulations complete!")
 ```
 
+### Save Simulation Data
+
+```{python}
+#| label: save-data
+
+import json
+from pathlib import Path
+
+# Output directory
+output_dir = Path("../../../output/opm/simulate")
+output_dir.mkdir(parents=True, exist_ok=True)
+
+# Save data for each scenario
+for name in scenario_names:
+    scenario_dir = output_dir / name
+    scenario_dir.mkdir(exist_ok=True)
+    
+    r = results[name]
+    sc = config.SCENARIOS[name]
+    
+    # Save observed data (what econometrician sees)
+    np.save(scenario_dir / "prices.npy", r.prices)
+    np.save(scenario_dir / "shares.npy", r.shares)
+    
+    # Save true shocks (for validation)
+    np.save(scenario_dir / "xi_true.npy", r.xi)
+    np.save(scenario_dir / "omega_true.npy", r.omega)
+    
+    # Save realized parameters
+    np.save(scenario_dir / "delta_realized.npy", r.delta)
+    np.save(scenario_dir / "costs_realized.npy", r.costs)
+    
+    # Save markups and convergence info
+    np.save(scenario_dir / "markups.npy", r.markups)
+    np.save(scenario_dir / "converged.npy", r.converged)
+    np.save(scenario_dir / "foc_errors.npy", r.foc_errors)
+    
+    # Save config metadata
+    config_meta = {
+        "scenario": name,
+        "description": sc["description"],
+        "n_markets": n_markets,
+        "n_products": len(sc["delta"]),
+        "alpha": sc["alpha"],
+        "delta_bar": sc["delta"].tolist(),
+        "costs_bar": sc["costs"].tolist(),
+        "ownership": sc["ownership"].tolist(),
+        "sigma_xi": sigma_xi,
+        "sigma_omega": sigma_omega,
+        "simulation_seed": simulation_seed,
+        "solver_params": {
+            "damping": damping,
+            "tolerance": tolerance,
+            "max_iterations": max_iterations,
+        },
+    }
+    with open(scenario_dir / "config.json", "w") as f:
+        json.dump(config_meta, f, indent=2)
+
+print("=" * 60)
+print("DATA SAVED")
+print("=" * 60)
+print()
+print(f"Output directory: {output_dir.resolve()}")
+print()
+print("Files saved per scenario:")
+print("  - prices.npy          (observed equilibrium prices)")
+print("  - shares.npy          (observed market shares)")
+print("  - xi_true.npy         (true demand shocks, for validation)")
+print("  - omega_true.npy      (true cost shocks, for validation)")
+print("  - delta_realized.npy  (realized mean utilities)")
+print("  - costs_realized.npy  (realized marginal costs)")
+print("  - markups.npy         (equilibrium markups)")
+print("  - converged.npy       (convergence flags)")
+print("  - foc_errors.npy      (FOC residual norms)")
+print("  - config.json         (simulation configuration)")
+print()
+for name in scenario_names:
+    print(f"  ✓ {name}/")
+```
+
 ---
 
 ## Results

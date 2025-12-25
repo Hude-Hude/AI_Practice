@@ -86,6 +86,86 @@ class TestOutputStructure:
         result = simulate_opm_markets(**baseline_params)
         assert result.n_products == 3
 
+    def test_xi_shape(self, baseline_params) -> None:
+        """Demand shocks should have shape (n_markets, J)."""
+        result = simulate_opm_markets(**baseline_params)
+        assert result.xi.shape == (100, 3)
+
+    def test_omega_shape(self, baseline_params) -> None:
+        """Cost shocks should have shape (n_markets, J)."""
+        result = simulate_opm_markets(**baseline_params)
+        assert result.omega.shape == (100, 3)
+
+    def test_delta_shape(self, baseline_params) -> None:
+        """Realized delta should have shape (n_markets, J)."""
+        result = simulate_opm_markets(**baseline_params)
+        assert result.delta.shape == (100, 3)
+
+    def test_costs_shape(self, baseline_params) -> None:
+        """Realized costs should have shape (n_markets, J)."""
+        result = simulate_opm_markets(**baseline_params)
+        assert result.costs.shape == (100, 3)
+
+
+# =============================================================================
+# Tests for Shock Storage
+# =============================================================================
+
+
+class TestShockStorage:
+    """Tests for shock storage and consistency."""
+
+    def test_delta_equals_delta_bar_plus_xi(self, baseline_params) -> None:
+        """Realized delta should equal delta_bar + xi."""
+        result = simulate_opm_markets(**baseline_params)
+        delta_bar = baseline_params["delta_bar"]
+        expected_delta = delta_bar + result.xi
+        np.testing.assert_allclose(result.delta, expected_delta)
+
+    def test_costs_equals_costs_bar_plus_omega(self, baseline_params) -> None:
+        """Realized costs should equal costs_bar + omega."""
+        result = simulate_opm_markets(**baseline_params)
+        costs_bar = baseline_params["costs_bar"]
+        expected_costs = costs_bar + result.omega
+        np.testing.assert_allclose(result.costs, expected_costs)
+
+    def test_xi_mean_near_zero(self, baseline_params) -> None:
+        """Demand shocks should have mean near zero."""
+        params = baseline_params.copy()
+        params["n_markets"] = 1000  # More markets for better mean estimate
+        result = simulate_opm_markets(**params)
+        assert np.abs(np.mean(result.xi)) < 0.1  # Within 0.1 of zero
+
+    def test_omega_mean_near_zero(self, baseline_params) -> None:
+        """Cost shocks should have mean near zero."""
+        params = baseline_params.copy()
+        params["n_markets"] = 1000
+        result = simulate_opm_markets(**params)
+        assert np.abs(np.mean(result.omega)) < 0.1
+
+    def test_xi_std_matches_sigma_xi(self, baseline_params) -> None:
+        """Demand shock std should approximately match sigma_xi."""
+        params = baseline_params.copy()
+        params["n_markets"] = 1000
+        result = simulate_opm_markets(**params)
+        sigma_xi = params["sigma_xi"]
+        # Allow 20% tolerance for sampling variation
+        assert np.abs(np.std(result.xi) - sigma_xi) < 0.2 * sigma_xi
+
+    def test_omega_std_matches_sigma_omega(self, baseline_params) -> None:
+        """Cost shock std should approximately match sigma_omega."""
+        params = baseline_params.copy()
+        params["n_markets"] = 1000
+        result = simulate_opm_markets(**params)
+        sigma_omega = params["sigma_omega"]
+        assert np.abs(np.std(result.omega) - sigma_omega) < 0.2 * sigma_omega
+
+    def test_markups_equal_prices_minus_costs(self, baseline_params) -> None:
+        """Markups should equal prices minus realized costs."""
+        result = simulate_opm_markets(**baseline_params)
+        expected_markups = result.prices - result.costs
+        np.testing.assert_allclose(result.markups, expected_markups, rtol=1e-8)
+
 
 # =============================================================================
 # Tests for Convergence
