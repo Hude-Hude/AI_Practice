@@ -645,6 +645,229 @@ if all_passed:
     print("=" * 80)
 ```
 
+### Failure Case Diagnosis
+
+When markets fail to converge, we need to understand why. This section identifies failed markets and diagnoses the root causes by examining the shock realizations that led to non-convergence.
+
+```{python}
+#| label: failure-diagnosis
+
+# Identify all failures across scenarios
+total_failures = 0
+failure_data = {}
+
+for name in scenario_names:
+    r = results[name]
+    n_failed = np.sum(~r.converged)
+    total_failures += n_failed
+    
+    if n_failed > 0:
+        failed_indices = np.where(~r.converged)[0]
+        failure_data[name] = {
+            "indices": failed_indices,
+            "foc_errors": r.foc_errors[failed_indices],
+            "prices": r.prices[failed_indices],
+            "shares": r.shares[failed_indices],
+        }
+
+print("=" * 80)
+print("FAILURE CASE DIAGNOSIS")
+print("=" * 80)
+print()
+
+if total_failures == 0:
+    print("✓ No convergence failures detected across all scenarios!")
+    print()
+    print("All markets converged successfully. This indicates:")
+    print("  - Shock magnitudes (σ_ξ, σ_ω) are within reasonable bounds")
+    print("  - Solver parameters (damping, tolerance, max_iter) are appropriate")
+    print("  - No extreme parameter combinations occurred")
+else:
+    print(f"⚠️  Total failures: {total_failures} across all scenarios")
+    print()
+    print(f"{'Scenario':<12} {'Failures':<10} {'Failure Rate':<15}")
+    print("-" * 40)
+    for name in scenario_names:
+        r = results[name]
+        n_failed = np.sum(~r.converged)
+        rate = 100 * n_failed / n_markets
+        print(f"{name:<12} {n_failed:<10} {rate:<15.2f}%")
+```
+
+```{python}
+#| label: failure-shock-analysis
+
+if total_failures > 0:
+    print("=" * 80)
+    print("SHOCK ANALYSIS FOR FAILED MARKETS")
+    print("=" * 80)
+    print()
+    
+    # Regenerate shocks to identify what caused failures
+    for name in scenario_names:
+        if name not in failure_data:
+            continue
+            
+        sc = config.SCENARIOS[name]
+        J = len(sc["delta"])
+        failed_idx = failure_data[name]["indices"]
+        
+        print(f"\n--- {name.upper()} SCENARIO ({len(failed_idx)} failures) ---")
+        print()
+        
+        # Regenerate all shocks with same seed
+        np.random.seed(simulation_seed)
+        xi_all = np.zeros((n_markets, J))
+        omega_all = np.zeros((n_markets, J))
+        delta_realized = np.zeros((n_markets, J))
+        costs_realized = np.zeros((n_markets, J))
+        
+        for m in range(n_markets):
+            xi_all[m] = np.random.normal(loc=0, scale=sigma_xi, size=J)
+            omega_all[m] = np.random.normal(loc=0, scale=sigma_omega, size=J)
+            delta_realized[m] = sc["delta"] + xi_all[m]
+            costs_realized[m] = sc["costs"] + omega_all[m]
+        
+        # Extract failed market shocks
+        xi_failed = xi_all[failed_idx]
+        omega_failed = omega_all[failed_idx]
+        delta_failed = delta_realized[failed_idx]
+        costs_failed = costs_realized[failed_idx]
+        
+        # Store for visualization
+        failure_data[name]["xi"] = xi_failed
+        failure_data[name]["omega"] = omega_failed
+        failure_data[name]["delta_realized"] = delta_failed
+        failure_data[name]["costs_realized"] = costs_failed
+        failure_data[name]["xi_all"] = xi_all
+        failure_data[name]["omega_all"] = omega_all
+        
+        # Diagnose issues
+        print("Potential Issues Detected:")
+        
+        # Check for negative costs
+        neg_cost_markets = np.any(costs_failed < 0, axis=1)
+        n_neg_cost = np.sum(neg_cost_markets)
+        if n_neg_cost > 0:
+            print(f"  ⚠️  Negative costs: {n_neg_cost} markets")
+            print(f"      Min cost realized: {np.min(costs_failed):.4f}")
+        
+        # Check for extreme demand shocks
+        extreme_xi = np.abs(xi_failed) > 3 * sigma_xi
+        n_extreme_xi = np.sum(np.any(extreme_xi, axis=1))
+        if n_extreme_xi > 0:
+            print(f"  ⚠️  Extreme demand shocks (|ξ| > 3σ): {n_extreme_xi} markets")
+            print(f"      Max |ξ|: {np.max(np.abs(xi_failed)):.4f}")
+        
+        # Check for very low delta (near-zero shares)
+        low_delta = delta_failed < 0
+        n_low_delta = np.sum(np.any(low_delta, axis=1))
+        if n_low_delta > 0:
+            print(f"  ⚠️  Negative mean utility (δ < 0): {n_low_delta} markets")
+            print(f"      Min δ realized: {np.min(delta_failed):.4f}")
+        
+        # Summary statistics for failed markets
+        print()
+        print("Failed Market Statistics:")
+        print(f"  Demand shocks (ξ): mean={np.mean(xi_failed):.4f}, std={np.std(xi_failed):.4f}")
+        print(f"  Cost shocks (ω):   mean={np.mean(omega_failed):.4f}, std={np.std(omega_failed):.4f}")
+        print(f"  FOC errors:        mean={np.mean(failure_data[name]['foc_errors']):.2e}")
+        
+        # Compare to converged markets
+        conv_idx = np.where(results[name].converged)[0]
+        xi_conv = xi_all[conv_idx]
+        omega_conv = omega_all[conv_idx]
+        
+        print()
+        print("Comparison (Failed vs Converged):")
+        print(f"  |ξ| mean - Failed: {np.mean(np.abs(xi_failed)):.4f}, Converged: {np.mean(np.abs(xi_conv)):.4f}")
+        print(f"  |ω| mean - Failed: {np.mean(np.abs(omega_failed)):.4f}, Converged: {np.mean(np.abs(omega_conv)):.4f}")
+else:
+    print("\n✓ No failures to analyze - all markets converged successfully.")
+```
+
+```{python}
+#| label: fig-failure-visualization
+#| fig-cap: "Shock Distributions: Failed vs Converged Markets"
+
+if total_failures > 0:
+    # Create visualization for scenarios with failures
+    scenarios_with_failures = [n for n in scenario_names if n in failure_data]
+    n_plots = len(scenarios_with_failures)
+    
+    if n_plots > 0:
+        fig, axes = plt.subplots(n_plots, 2, figsize=(14, 4 * n_plots))
+        if n_plots == 1:
+            axes = axes.reshape(1, -1)
+        
+        for i, name in enumerate(scenarios_with_failures):
+            fd = failure_data[name]
+            r = results[name]
+            conv_idx = np.where(r.converged)[0]
+            
+            # Demand shock distribution
+            ax1 = axes[i, 0]
+            ax1.hist(fd["xi_all"][conv_idx].flatten(), bins=30, alpha=0.6, 
+                     label='Converged', color='green', density=True)
+            ax1.hist(fd["xi"].flatten(), bins=15, alpha=0.8, 
+                     label='Failed', color='red', density=True)
+            ax1.axvline(0, color='black', linestyle='--', alpha=0.5)
+            ax1.set_xlabel('Demand Shock (ξ)')
+            ax1.set_ylabel('Density')
+            ax1.set_title(f'{name.capitalize()}: Demand Shocks')
+            ax1.legend()
+            
+            # Cost shock distribution
+            ax2 = axes[i, 1]
+            ax2.hist(fd["omega_all"][conv_idx].flatten(), bins=30, alpha=0.6,
+                     label='Converged', color='green', density=True)
+            ax2.hist(fd["omega"].flatten(), bins=15, alpha=0.8,
+                     label='Failed', color='red', density=True)
+            ax2.axvline(0, color='black', linestyle='--', alpha=0.5)
+            ax2.set_xlabel('Cost Shock (ω)')
+            ax2.set_ylabel('Density')
+            ax2.set_title(f'{name.capitalize()}: Cost Shocks')
+            ax2.legend()
+        
+        plt.tight_layout()
+        plt.show()
+else:
+    print("No failure visualization needed - all markets converged.")
+```
+
+```{python}
+#| label: failure-detailed-table
+
+if total_failures > 0:
+    print("=" * 90)
+    print("DETAILED FAILURE CASES (first 5 per scenario)")
+    print("=" * 90)
+    
+    for name in scenario_names:
+        if name not in failure_data:
+            continue
+            
+        fd = failure_data[name]
+        sc = config.SCENARIOS[name]
+        J = len(sc["delta"])
+        
+        print(f"\n--- {name.upper()} ---")
+        print(f"{'Market':<8} {'FOC Err':<12} {'ξ (shocks)':<30} {'ω (shocks)':<30} {'c realized':<30}")
+        print("-" * 110)
+        
+        for i, idx in enumerate(fd["indices"][:5]):  # Show first 5
+            xi_str = str(np.round(fd["xi"][i], 3))
+            omega_str = str(np.round(fd["omega"][i], 3))
+            costs_str = str(np.round(fd["costs_realized"][i], 3))
+            foc = fd["foc_errors"][i]
+            print(f"{idx:<8} {foc:<12.2e} {xi_str:<30} {omega_str:<30} {costs_str:<30}")
+        
+        if len(fd["indices"]) > 5:
+            print(f"... and {len(fd['indices']) - 5} more failures")
+else:
+    print("✓ No detailed failure analysis needed - all markets converged.")
+```
+
 ---
 
 ## Conclusion
