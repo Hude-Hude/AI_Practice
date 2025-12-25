@@ -1,26 +1,250 @@
 ---
-title: "Problem: Simulate the Static Oligopoly Pricing Model"
+title: "Monte Carlo Simulation for Static Oligopoly Pricing"
+subtitle: "Market-Level Simulation with Demand and Cost Shocks"
 format:
   html:
-    toc: false
     code-fold: false
-jupyter: python3
-execute:
-  echo: false
-  warning: false
+    toc: true
+    toc-depth: 3
 ---
 
-## Goal
+## Instruction
+
+### Goal
 
 Guide juniors to build the analogue of `scripts/simulate_mdp/simulate_mdp.qmd` for the static oligopoly pricing environment solved in `problems/solve_opm/solve_opm.qmd`. The simulation should draw repeated markets, solve for equilibrium prices using the solver outputs, and collect market-level outcomes (prices, quantities, markups, profits).
 
-## Required Components
+### Required Components
 
 1. **Input artifacts**: Describe how to load the specified demand and cost parameters, as well as any solver outputs (e.g., equilibrium price functions or markup fixed-point objects).
 2. **Simulation design**: Specify market size, demand shocks, and rival cost shocks that should be resampled each Monte Carlo repetition; stress the need for reproducible seeds via configuration files.
 3. **Outputs**: Enumerate summary statistics juniors must produce (distribution of equilibrium prices, markup dispersion, pass-through to costs, comparative statics over cost shocks).
 4. **Diagnostics**: Explain how to check equilibrium feasibility (FOC residuals) and how to fail fast when the solver cannot converge for a simulated draw.
 
-## Deliverable
+### Deliverable
 
 An executable Quarto report (to be implemented by juniors) and rendered html report that mirrors the flow of the MDP simulator but focuses solely on static oligopoly market simulations. Juniors will fill in all code, figures, and tables.
+
+---
+
+## Simulation Design
+
+### Overview
+
+The Monte Carlo simulator generates a cross-section of markets by drawing random demand and cost shocks, solving for equilibrium in each market, and collecting outcomes. Unlike the MDP simulator which generates time-series panel data, the OPM simulator produces independent market observations.
+
+**Key distinction from MDP:**
+
+| MDP Simulator | OPM Simulator |
+|---------------|---------------|
+| Dynamic (time series) | Static (cross-section) |
+| Forward simulation with trained value functions | Solve equilibrium per market draw |
+| Agents make sequential choices | One equilibrium per market |
+| State evolves over time | Each market is independent |
+
+### Model Structure
+
+For each market $m = 1, \ldots, M$:
+
+**Demand side**: Mean utility includes a market-specific shock:
+$$
+\delta_{jm} = \bar{\delta}_j + \xi_{jm}
+$$
+
+where:
+
+- $\bar{\delta}_j$ = baseline mean utility (from config)
+- $\xi_{jm} \sim N(0, \sigma_\xi^2)$ = demand shock (unobserved quality, local preferences)
+
+**Supply side**: Marginal cost includes a market-specific shock:
+$$
+c_{jm} = \bar{c}_j + \omega_{jm}
+$$
+
+where:
+
+- $\bar{c}_j$ = baseline marginal cost (from config)
+- $\omega_{jm} \sim N(0, \sigma_\omega^2)$ = cost shock (input prices, productivity)
+
+**Structural parameters** (fixed across markets):
+
+- $\alpha$ = price sensitivity coefficient
+- $\Omega$ = ownership matrix
+
+### Equilibrium per Market
+
+For each market draw $(\delta_m, c_m)$, we solve for Bertrand-Nash equilibrium:
+$$
+p_m^* = c_m + \eta_m^*
+$$
+
+where markups satisfy the fixed-point:
+$$
+\eta_m^* = (\Omega \odot \Delta(p_m^*))^{-1} s(p_m^*)
+$$
+
+This uses the `solve_equilibrium_prices()` function from the solver module.
+
+### Outputs Collected
+
+For each market $m$, we store:
+
+| Output | Symbol | Description |
+|--------|--------|-------------|
+| Prices | $p_m$ | Equilibrium prices, Vector[J] |
+| Shares | $s_m$ | Market shares, Vector[J] |
+| Markups | $\eta_m$ | Price-cost margins, Vector[J] |
+| Profits | $\pi_m$ | Per-unit profits = $s_m \odot \eta_m$ |
+| Converged | $\mathbb{1}_m$ | Solver convergence flag |
+| FOC error | $\epsilon_m$ | Max FOC residual norm |
+
+### Type Definitions
+
+```
+TYPE DEFINITIONS
+────────────────
+Scalar      = Float                      # Single real number
+Vector[J]   = Array[Float, J]            # 1D array of J floats
+Matrix[M,J] = Array[Float, M, J]         # 2D array of shape (M, J)
+Bool        = Boolean                    # True/False
+```
+
+### Algorithm
+
+```
+ALGORITHM: SIMULATE_OPM_MARKETS
+───────────────────────────────
+INPUT:
+  δ̄            : Vector[J]       # Baseline mean utilities
+  c̄            : Vector[J]       # Baseline marginal costs
+  α            : Scalar          # Price sensitivity (fixed)
+  Ω            : Matrix[J,J]     # Ownership matrix (fixed)
+  M            : Int             # Number of market draws
+  σ_ξ          : Scalar          # Std dev of demand shocks
+  σ_ω          : Scalar          # Std dev of cost shocks
+  seed         : Int             # Random seed
+
+OUTPUT:
+  prices       : Matrix[M, J]    # Equilibrium prices per market
+  shares       : Matrix[M, J]    # Market shares per market
+  markups      : Matrix[M, J]    # Markups per market
+  converged    : Vector[M]       # Convergence flags (Bool)
+  foc_errors   : Vector[M]       # FOC residual norms
+
+PROCEDURE:
+  SET_SEED(seed)
+  
+  # Initialize storage
+  prices    ← Matrix[M, J]
+  shares    ← Matrix[M, J]
+  markups   ← Matrix[M, J]
+  converged ← Vector[M]
+  foc_errors ← Vector[M]
+  
+  FOR m = 1 TO M:
+    # Draw demand shocks
+    ξ_m : Vector[J] ← SAMPLE_NORMAL(mean=0, std=σ_ξ, size=J)
+    δ_m : Vector[J] ← δ̄ + ξ_m
+    
+    # Draw cost shocks
+    ω_m : Vector[J] ← SAMPLE_NORMAL(mean=0, std=σ_ω, size=J)
+    c_m : Vector[J] ← c̄ + ω_m
+    
+    # Solve equilibrium for this market
+    result_m ← SOLVE_EQUILIBRIUM_PRICES(δ_m, α, c_m, Ω)
+    
+    # Store outcomes
+    prices[m]    ← result_m.prices
+    shares[m]    ← result_m.shares
+    markups[m]   ← result_m.markups
+    converged[m] ← result_m.converged
+    
+    # Compute FOC residual
+    Δ_m ← COMPUTE_DELTA(α, result_m.shares)
+    A_m ← Ω ⊙ Δ_m
+    foc_residual ← result_m.shares - A_m @ result_m.markups
+    foc_errors[m] ← max(|foc_residual|)
+  
+  RETURN SimulationResult(prices, shares, markups, converged, foc_errors)
+```
+
+### Diagnostics
+
+**1. Convergence Rate**
+
+Track the fraction of markets where the solver converged:
+$$
+\text{Convergence Rate} = \frac{1}{M} \sum_{m=1}^{M} \mathbb{1}[\text{converged}_m]
+$$
+
+Target: 100% convergence. If <100%, investigate which shock combinations cause failure.
+
+**2. FOC Residuals**
+
+For each market, verify the first-order conditions are satisfied:
+$$
+\epsilon_m = \| s_m - (\Omega \odot \Delta_m) \eta_m \|_\infty
+$$
+
+Target: $\epsilon_m < 10^{-8}$ for all markets.
+
+**3. Economic Sanity Checks**
+
+| Check | Condition | Interpretation |
+|-------|-----------|----------------|
+| Positive prices | $p_{jm} > 0$ | Prices are positive |
+| Positive markups | $\eta_{jm} > 0$ | Markups above zero |
+| Prices > costs | $p_{jm} > c_{jm}$ | Firms make positive margin |
+| Shares sum < 1 | $\sum_j s_{jm} < 1$ | Outside option exists |
+
+### Summary Statistics
+
+After simulation, compute:
+
+**1. Distribution of Prices**
+
+- Mean, std, quantiles of $p_{jm}$ across markets
+- Compare to baseline equilibrium
+
+**2. Markup Dispersion**
+
+- Distribution of $\eta_{jm}$
+- Correlation between $\eta$ and $s$
+
+**3. Pass-Through Analysis**
+
+Estimate cost pass-through by regressing prices on costs:
+$$
+p_{jm} = \beta_0 + \rho \cdot c_{jm} + \text{error}
+$$
+
+where $\rho$ is the pass-through rate. Theory predicts $\rho \approx 1 - s$ for logit demand.
+
+**4. Comparative Statics**
+
+- Effect of demand shocks ($\xi$) on prices
+- Effect of cost shocks ($\omega$) on markups
+
+---
+
+## Implementation
+
+*To be implemented following the pseudocode above.*
+
+---
+
+## Results
+
+*To be filled with simulation outputs, figures, and tables.*
+
+---
+
+## Diagnostics
+
+*To be filled with convergence checks and FOC residual analysis.*
+
+---
+
+## Conclusion
+
+*To be filled with summary of findings.*
