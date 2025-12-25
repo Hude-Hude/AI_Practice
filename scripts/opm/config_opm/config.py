@@ -63,6 +63,24 @@ tolerance = 1e-10
 max_iterations = 1000
 
 # =============================================================================
+# SIMULATION PARAMETERS
+# =============================================================================
+
+# Number of market draws for Monte Carlo simulation
+n_markets = 1000
+
+# Standard deviation of demand shocks (ξ ~ N(0, σ_ξ²))
+# Higher σ_ξ → more variation in product quality across markets
+sigma_xi = 0.5
+
+# Standard deviation of cost shocks (ω ~ N(0, σ_ω²))
+# Higher σ_ω → more variation in marginal costs across markets
+sigma_omega = 0.2
+
+# Random seed for reproducibility
+simulation_seed = 42
+
+# =============================================================================
 # ANALYTICAL BENCHMARKS
 # =============================================================================
 
@@ -160,7 +178,15 @@ if __name__ == "__main__":
     print(f"Price sensitivity (α): {alpha}")
     print(f"Marginal costs (c): {costs}")
     print(f"Ownership (Ω):\n{ownership}")
-    print(f"Damping (λ): {damping}")
-    print(f"Tolerance (ε): {tolerance}")
-    print(f"Max iterations: {max_iterations}")
+    print()
+    print("Solver Parameters:")
+    print(f"  Damping (λ): {damping}")
+    print(f"  Tolerance (ε): {tolerance}")
+    print(f"  Max iterations: {max_iterations}")
+    print()
+    print("Simulation Parameters:")
+    print(f"  Number of markets (M): {n_markets}")
+    print(f"  Demand shock std (σ_ξ): {sigma_xi}")
+    print(f"  Cost shock std (σ_ω): {sigma_omega}")
+    print(f"  Random seed: {simulation_seed}")
 
