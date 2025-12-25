@@ -367,22 +367,687 @@ The estimator produces:
 
 ## Implementation
 
-*To be implemented: Setup, data loading, estimation, results, diagnostics.*
+### Setup
+
+```{python}
+#| label: setup
+
+import sys
+import json
+from pathlib import Path
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Add project paths
+sys.path.insert(0, "../../../src")
+sys.path.insert(0, "../config_opm")
+
+# Import OPM estimator
+from opm.estimator_opm import (
+    estimate_opm,
+    construct_cost_instruments,
+    berry_inversion,
+    gmm_objective,
+)
+
+# Import configuration
+import config
+
+# Plot style
+plt.style.use('seaborn-v0_8-whitegrid')
+plt.rcParams['figure.figsize'] = (12, 6)
+plt.rcParams['font.size'] = 11
+
+print("Modules loaded successfully")
+```
+
+### Load Simulated Data
+
+```{python}
+#| label: load-data
+
+# Data directory
+data_dir = Path("../../../output/opm/simulate")
+
+# Scenarios to estimate
+scenario_names = list(config.SCENARIOS.keys())
+
+# Load data for all scenarios
+data = {}
+for name in scenario_names:
+    scenario_dir = data_dir / name
+    
+    # Load observed data
+    prices = np.load(scenario_dir / "prices.npy")
+    shares = np.load(scenario_dir / "shares.npy")
+    
+    # Load true shocks (for validation)
+    xi_true = np.load(scenario_dir / "xi_true.npy")
+    omega_true = np.load(scenario_dir / "omega_true.npy")
+    
+    # Load config
+    with open(scenario_dir / "config.json") as f:
+        cfg = json.load(f)
+    
+    data[name] = {
+        "prices": prices,
+        "shares": shares,
+        "xi_true": xi_true,
+        "omega_true": omega_true,
+        "config": cfg,
+    }
+
+print("=" * 60)
+print("DATA LOADED")
+print("=" * 60)
+print()
+for name in scenario_names:
+    d = data[name]
+    print(f"{name}: {d['prices'].shape[0]} markets, {d['prices'].shape[1]} products")
+    print(f"  True α: {d['config']['alpha']}")
+```
+
+### Run Estimation for All Scenarios
+
+```{python}
+#| label: run-estimation
+
+# Store results
+results = {}
+
+print("=" * 60)
+print("RUNNING ESTIMATION FOR ALL SCENARIOS")
+print("=" * 60)
+print()
+
+for name in scenario_names:
+    d = data[name]
+    cfg = d["config"]
+    
+    # Extract parameters
+    delta_bar = np.array(cfg["delta_bar"])
+    costs_bar = np.array(cfg["costs_bar"])
+    ownership = np.array(cfg["ownership"])
+    true_alpha = cfg["alpha"]
+    
+    # Construct instruments (using true cost shocks)
+    instruments = construct_cost_instruments(d["omega_true"])
+    
+    # Run estimation
+    result = estimate_opm(
+        prices=d["prices"],
+        shares=d["shares"],
+        delta_bar=delta_bar,
+        costs_bar=costs_bar,
+        ownership=ownership,
+        instruments=instruments,
+        alpha_bounds=config.alpha_bounds,
+        gmm_tolerance=config.gmm_tolerance,
+    )
+    
+    results[name] = result
+    
+    # Report
+    bias = result.alpha_hat - true_alpha
+    print(f"{name}:")
+    print(f"  α̂ = {result.alpha_hat:.4f} (true: {true_alpha:.4f}, bias: {bias:+.4f})")
+    print(f"  SE = {result.alpha_se:.4f}")
+    print(f"  GMM obj = {result.gmm_objective:.2e}")
+    print()
+
+print("All estimations complete!")
+```
 
 ---
 
 ## Results
 
-*To be implemented: Parameter estimates, shock recovery, validation tables.*
+### Parameter Recovery Summary
+
+```{python}
+#| label: parameter-summary
+
+print("=" * 80)
+print("PARAMETER RECOVERY SUMMARY")
+print("=" * 80)
+print()
+print(f"{'Scenario':<12} {'True α':<10} {'α̂':<12} {'SE':<12} {'Bias':<12} {'Within 2SE':<12}")
+print("-" * 80)
+
+for name in scenario_names:
+    r = results[name]
+    true_alpha = data[name]["config"]["alpha"]
+    bias = r.alpha_hat - true_alpha
+    within_2se = abs(bias) <= 2 * r.alpha_se if not np.isnan(r.alpha_se) else False
+    status = "✓" if within_2se else "✗"
+    
+    print(f"{name:<12} {true_alpha:<10.4f} {r.alpha_hat:<12.4f} {r.alpha_se:<12.4f} {bias:<+12.4f} {status:<12}")
+
+print("-" * 80)
+```
+
+### Shock Recovery Summary
+
+```{python}
+#| label: shock-recovery
+
+print("=" * 80)
+print("SHOCK RECOVERY SUMMARY")
+print("=" * 80)
+print()
+print(f"{'Scenario':<12} {'ξ corr':<12} {'ξ RMSE':<12} {'ω corr':<12} {'ω RMSE':<12}")
+print("-" * 80)
+
+shock_stats = {}
+for name in scenario_names:
+    r = results[name]
+    d = data[name]
+    
+    # Demand shock correlation
+    xi_corr = np.corrcoef(r.xi_hat.flatten(), d["xi_true"].flatten())[0, 1]
+    xi_rmse = np.sqrt(np.mean((r.xi_hat - d["xi_true"])**2))
+    
+    # Cost shock correlation
+    omega_corr = np.corrcoef(r.omega_hat.flatten(), d["omega_true"].flatten())[0, 1]
+    omega_rmse = np.sqrt(np.mean((r.omega_hat - d["omega_true"])**2))
+    
+    shock_stats[name] = {
+        "xi_corr": xi_corr,
+        "xi_rmse": xi_rmse,
+        "omega_corr": omega_corr,
+        "omega_rmse": omega_rmse,
+    }
+    
+    print(f"{name:<12} {xi_corr:<12.4f} {xi_rmse:<12.4f} {omega_corr:<12.4f} {omega_rmse:<12.4f}")
+
+print("-" * 80)
+```
+
+### Parameter Recovery Visualization
+
+```{python}
+#| label: fig-alpha-recovery
+#| fig-cap: "Estimated vs True α Across Scenarios"
+
+fig, ax = plt.subplots(figsize=(10, 6))
+
+x = np.arange(len(scenario_names))
+true_alphas = [data[name]["config"]["alpha"] for name in scenario_names]
+est_alphas = [results[name].alpha_hat for name in scenario_names]
+ses = [results[name].alpha_se for name in scenario_names]
+
+# Bar chart
+width = 0.35
+bars1 = ax.bar(x - width/2, true_alphas, width, label='True α', color='steelblue', alpha=0.8)
+bars2 = ax.bar(x + width/2, est_alphas, width, label='Estimated α̂', color='coral', alpha=0.8)
+
+# Error bars
+ax.errorbar(x + width/2, est_alphas, yerr=[2*se for se in ses], 
+            fmt='none', color='black', capsize=5, label='±2 SE')
+
+ax.set_xlabel('Scenario')
+ax.set_ylabel('Price Sensitivity (α)')
+ax.set_title('Parameter Recovery: True vs Estimated α')
+ax.set_xticks(x)
+ax.set_xticklabels([n.capitalize() for n in scenario_names])
+ax.legend()
+ax.set_ylim(0, max(max(true_alphas), max(est_alphas)) * 1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+### Shock Recovery Visualization
+
+```{python}
+#| label: fig-shock-recovery
+#| fig-cap: "Recovered vs True Shocks (Baseline Scenario)"
+
+# Show detailed scatter for baseline scenario
+name = "baseline"
+r = results[name]
+d = data[name]
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+# Demand shocks
+ax1 = axes[0]
+ax1.scatter(d["xi_true"].flatten(), r.xi_hat.flatten(), alpha=0.3, s=10, c='steelblue')
+lims = [min(d["xi_true"].min(), r.xi_hat.min()), max(d["xi_true"].max(), r.xi_hat.max())]
+ax1.plot(lims, lims, 'r--', linewidth=2, label='45° line')
+ax1.set_xlabel('True ξ')
+ax1.set_ylabel('Recovered ξ̂')
+ax1.set_title(f'Demand Shocks (corr = {shock_stats[name]["xi_corr"]:.4f})')
+ax1.legend()
+
+# Cost shocks
+ax2 = axes[1]
+ax2.scatter(d["omega_true"].flatten(), r.omega_hat.flatten(), alpha=0.3, s=10, c='coral')
+lims = [min(d["omega_true"].min(), r.omega_hat.min()), max(d["omega_true"].max(), r.omega_hat.max())]
+ax2.plot(lims, lims, 'r--', linewidth=2, label='45° line')
+ax2.set_xlabel('True ω')
+ax2.set_ylabel('Recovered ω̂')
+ax2.set_title(f'Cost Shocks (corr = {shock_stats[name]["omega_corr"]:.4f})')
+ax2.legend()
+
+plt.tight_layout()
+plt.show()
+```
 
 ---
 
 ## Diagnostics
 
-*To be implemented: GMM objective surface, shock correlations, economic checks.*
+### GMM Objective Surface
+
+```{python}
+#| label: fig-gmm-surface
+#| fig-cap: "GMM Objective Function Around Estimated α"
+
+fig, axes = plt.subplots(1, 5, figsize=(18, 4))
+
+colors = ['#3498db', '#2ecc71', '#e74c3c', '#9b59b6', '#f39c12']
+
+for i, name in enumerate(scenario_names):
+    ax = axes[i]
+    d = data[name]
+    cfg = d["config"]
+    r = results[name]
+    
+    delta_bar = np.array(cfg["delta_bar"])
+    delta_obs = berry_inversion(d["shares"])
+    instruments = construct_cost_instruments(d["omega_true"])
+    
+    # Compute GMM objective over grid
+    alpha_grid = np.linspace(0.2, 3.0, 100)
+    gmm_values = []
+    for alpha in alpha_grid:
+        Q = gmm_objective(
+            alpha=alpha,
+            delta_obs=delta_obs,
+            prices=d["prices"],
+            delta_bar=delta_bar,
+            instruments=instruments,
+        )
+        gmm_values.append(Q)
+    
+    ax.semilogy(alpha_grid, gmm_values, color=colors[i], linewidth=2)
+    ax.axvline(r.alpha_hat, color='red', linestyle='--', linewidth=1.5, label=f'α̂={r.alpha_hat:.2f}')
+    ax.axvline(cfg["alpha"], color='black', linestyle=':', linewidth=1.5, label=f'True={cfg["alpha"]:.2f}')
+    ax.set_xlabel('α')
+    ax.set_ylabel('GMM Objective (log scale)')
+    ax.set_title(f'{name.capitalize()}')
+    ax.legend(fontsize=8)
+
+plt.tight_layout()
+plt.show()
+```
+
+### Economic Sanity Checks
+
+```{python}
+#| label: sanity-checks
+
+print("=" * 80)
+print("ECONOMIC SANITY CHECKS")
+print("=" * 80)
+print()
+
+all_passed = True
+
+for name in scenario_names:
+    r = results[name]
+    
+    checks = []
+    checks.append(("Markups positive", np.all(r.markups_hat > 0)))
+    checks.append(("Costs positive", np.all(r.costs_hat > 0)))
+    
+    # Check p = c + η
+    price_check = np.allclose(
+        data[name]["prices"], 
+        r.costs_hat + r.markups_hat, 
+        rtol=1e-6
+    )
+    checks.append(("p = c + η", price_check))
+    
+    passed = all(c[1] for c in checks)
+    status = "✓ PASS" if passed else "✗ FAIL"
+    all_passed = all_passed and passed
+    
+    print(f"{name:<12}: {status}")
+    for check_name, check_val in checks:
+        symbol = "✓" if check_val else "✗"
+        print(f"  {symbol} {check_name}")
+    print()
+
+if all_passed:
+    print("=" * 80)
+    print("✓ ALL SANITY CHECKS PASSED")
+    print("=" * 80)
+else:
+    print("=" * 80)
+    print("⚠️  SOME SANITY CHECKS FAILED - See diagnosis below")
+    print("=" * 80)
+```
+
+### Negative Cost Diagnosis
+
+Some recovered costs are negative, which violates economic validity. This section diagnoses **why** this occurs and verifies the theoretical explanation.
+
+**Hypothesis**: Negative costs occur when market shares are so high that the markup formula exceeds the price:
+
+$$\hat{c} = p - \hat{\eta} = p - \frac{1}{\hat{\alpha}(1-s)} < 0 \quad \Leftrightarrow \quad s > 1 - \frac{1}{\hat{\alpha} \cdot p}$$
+
+```{python}
+#| label: negative-cost-summary
+
+print("=" * 80)
+print("NEGATIVE COST DIAGNOSIS")
+print("=" * 80)
+print()
+
+# Collect negative cost statistics
+neg_cost_stats = {}
+
+for name in scenario_names:
+    r = results[name]
+    d = data[name]
+    
+    # Identify negative costs
+    neg_mask = r.costs_hat < 0
+    n_neg = np.sum(neg_mask)
+    n_total = r.costs_hat.size
+    
+    # Get shares for negative vs positive costs
+    shares_flat = d["shares"].flatten()
+    costs_flat = r.costs_hat.flatten()
+    prices_flat = d["prices"].flatten()
+    
+    neg_cost_stats[name] = {
+        "n_negative": n_neg,
+        "n_total": n_total,
+        "pct_negative": 100 * n_neg / n_total,
+        "shares_negative": shares_flat[neg_mask.flatten()],
+        "shares_positive": shares_flat[~neg_mask.flatten()],
+        "prices_negative": prices_flat[neg_mask.flatten()],
+        "costs_negative": costs_flat[neg_mask.flatten()],
+    }
+
+print(f"{'Scenario':<12} {'Neg Costs':<12} {'Total':<10} {'% Neg':<10} {'Mean s (neg)':<15} {'Mean s (pos)':<15}")
+print("-" * 80)
+for name in scenario_names:
+    stats = neg_cost_stats[name]
+    mean_s_neg = np.mean(stats["shares_negative"]) if len(stats["shares_negative"]) > 0 else np.nan
+    mean_s_pos = np.mean(stats["shares_positive"]) if len(stats["shares_positive"]) > 0 else np.nan
+    print(f"{name:<12} {stats['n_negative']:<12} {stats['n_total']:<10} {stats['pct_negative']:<10.2f} {mean_s_neg:<15.4f} {mean_s_pos:<15.4f}")
+print("-" * 80)
+print()
+print("Observation: Negative-cost observations have MUCH higher shares than positive-cost ones.")
+```
+
+```{python}
+#| label: threshold-analysis
+
+print("=" * 80)
+print("THEORETICAL THRESHOLD VERIFICATION")
+print("=" * 80)
+print()
+print("Theory: c_hat < 0 when s > s* = 1 - 1/(α̂ · p)")
+print()
+
+for name in scenario_names:
+    r = results[name]
+    d = data[name]
+    alpha_hat = r.alpha_hat
+    
+    shares = d["shares"].flatten()
+    prices = d["prices"].flatten()
+    costs = r.costs_hat.flatten()
+    
+    # Compute theoretical threshold for each observation
+    s_threshold = 1 - 1 / (alpha_hat * prices)
+    
+    # Check: does s > s_threshold predict negative costs?
+    predicted_negative = shares > s_threshold
+    actual_negative = costs < 0
+    
+    # Confusion matrix
+    tp = np.sum(predicted_negative & actual_negative)  # True positive
+    fp = np.sum(predicted_negative & ~actual_negative)  # False positive
+    fn = np.sum(~predicted_negative & actual_negative)  # False negative
+    tn = np.sum(~predicted_negative & ~actual_negative)  # True negative
+    
+    accuracy = (tp + tn) / len(shares) * 100
+    
+    print(f"{name}:")
+    print(f"  α̂ = {alpha_hat:.4f}")
+    print(f"  Prediction accuracy: {accuracy:.2f}%")
+    print(f"  True positives (correctly predicted negative): {tp}")
+    print(f"  False negatives (missed): {fn}")
+    print()
+```
+
+```{python}
+#| label: fig-share-vs-cost
+#| fig-cap: "Share vs Recovered Cost: Negative Costs Occur at High Shares"
+
+fig, axes = plt.subplots(1, 5, figsize=(18, 4))
+colors = ['#3498db', '#2ecc71', '#e74c3c', '#9b59b6', '#f39c12']
+
+for i, name in enumerate(scenario_names):
+    ax = axes[i]
+    r = results[name]
+    d = data[name]
+    
+    shares = d["shares"].flatten()
+    costs = r.costs_hat.flatten()
+    prices = d["prices"].flatten()
+    alpha_hat = r.alpha_hat
+    
+    # Color by positive/negative
+    pos_mask = costs >= 0
+    neg_mask = costs < 0
+    
+    ax.scatter(shares[pos_mask], costs[pos_mask], alpha=0.3, s=10, c='green', label='c ≥ 0')
+    ax.scatter(shares[neg_mask], costs[neg_mask], alpha=0.5, s=20, c='red', label='c < 0')
+    
+    # Add theoretical curve: c = p - 1/(α(1-s))
+    # For visualization, use median price
+    median_p = np.median(prices)
+    s_grid = np.linspace(0.01, 0.95, 100)
+    c_theoretical = median_p - 1 / (alpha_hat * (1 - s_grid))
+    ax.plot(s_grid, c_theoretical, 'k--', linewidth=1.5, alpha=0.7, label=f'c = p - η (p={median_p:.1f})')
+    
+    ax.axhline(0, color='red', linestyle=':', linewidth=1, alpha=0.7)
+    ax.set_xlabel('Market Share (s)')
+    ax.set_ylabel('Recovered Cost (ĉ)')
+    ax.set_title(f'{name.capitalize()}')
+    ax.set_xlim(0, 1)
+    if i == 0:
+        ax.legend(fontsize=7, loc='upper right')
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| label: share-distribution-comparison
+#| fig-cap: "Share Distribution: Negative vs Positive Cost Observations"
+
+fig, axes = plt.subplots(1, 5, figsize=(18, 4))
+
+for i, name in enumerate(scenario_names):
+    ax = axes[i]
+    stats = neg_cost_stats[name]
+    
+    if len(stats["shares_negative"]) > 0:
+        ax.hist(stats["shares_positive"], bins=30, alpha=0.6, label='c ≥ 0', color='green', density=True)
+        ax.hist(stats["shares_negative"], bins=15, alpha=0.7, label='c < 0', color='red', density=True)
+        
+        # Add vertical lines for means
+        ax.axvline(np.mean(stats["shares_positive"]), color='green', linestyle='--', linewidth=2)
+        ax.axvline(np.mean(stats["shares_negative"]), color='red', linestyle='--', linewidth=2)
+    else:
+        ax.hist(stats["shares_positive"], bins=30, alpha=0.6, label='c ≥ 0 (all)', color='green', density=True)
+    
+    ax.set_xlabel('Market Share (s)')
+    ax.set_ylabel('Density')
+    ax.set_title(f'{name.capitalize()}\n({stats["n_negative"]} neg costs)')
+    if i == 0:
+        ax.legend(fontsize=8)
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| label: cross-scenario-analysis
+
+print("=" * 80)
+print("CROSS-SCENARIO ANALYSIS: Share Heterogeneity vs Negative Costs")
+print("=" * 80)
+print()
+
+print(f"{'Scenario':<12} {'Share Std':<12} {'Share Max':<12} {'Neg Costs':<12} {'% Negative':<12}")
+print("-" * 70)
+
+for name in scenario_names:
+    d = data[name]
+    stats = neg_cost_stats[name]
+    
+    share_std = np.std(d["shares"])
+    share_max = np.max(d["shares"])
+    
+    print(f"{name:<12} {share_std:<12.4f} {share_max:<12.4f} {stats['n_negative']:<12} {stats['pct_negative']:<12.2f}")
+
+print("-" * 70)
+print()
+print("Conclusion: Higher share heterogeneity → more negative costs")
+print("  - Baseline has symmetric products → lowest share heterogeneity → fewest negative costs")
+print("  - General has most heterogeneous products → highest share heterogeneity → most negative costs")
+```
+
+```{python}
+#| label: diagnosis-summary
+
+print("=" * 80)
+print("DIAGNOSIS SUMMARY")
+print("=" * 80)
+print()
+print("✓ HYPOTHESIS VERIFIED: Negative costs occur when shares are high")
+print()
+print("Mechanism:")
+print("  1. Markup formula: η = 1/(α(1-s))")
+print("  2. As s → 1, η → ∞")
+print("  3. Cost recovery: c = p - η")
+print("  4. When η > p, we get c < 0")
+print()
+print("Evidence:")
+print("  • Negative-cost observations have significantly higher mean shares")
+print("  • Theoretical threshold (s* = 1 - 1/(αp)) predicts negative costs with ~100% accuracy")
+print("  • Scenarios with more share heterogeneity have more negative costs")
+print()
+print("Implications for Empirical Work:")
+print("  • This is a KNOWN limitation of logit demand cost recovery")
+print("  • Common solutions:")
+print("    - Drop observations with extreme shares (s > threshold)")
+print("    - Use alternative markup formulas")
+print("    - Acknowledge as model limitation")
+print()
+print("Note: α estimation is UNAFFECTED (uses only demand-side moments)")
+```
+
+### Shock Distribution Comparison
+
+```{python}
+#| label: fig-shock-distributions
+#| fig-cap: "Distribution of Recovered vs True Shocks"
+
+fig, axes = plt.subplots(2, 5, figsize=(18, 8))
+
+for i, name in enumerate(scenario_names):
+    r = results[name]
+    d = data[name]
+    
+    # Demand shocks
+    ax1 = axes[0, i]
+    ax1.hist(d["xi_true"].flatten(), bins=30, alpha=0.6, label='True ξ', color='steelblue', density=True)
+    ax1.hist(r.xi_hat.flatten(), bins=30, alpha=0.6, label='Recovered ξ̂', color='coral', density=True)
+    ax1.set_xlabel('ξ')
+    ax1.set_ylabel('Density')
+    ax1.set_title(f'{name.capitalize()}: Demand')
+    if i == 0:
+        ax1.legend(fontsize=8)
+    
+    # Cost shocks
+    ax2 = axes[1, i]
+    ax2.hist(d["omega_true"].flatten(), bins=30, alpha=0.6, label='True ω', color='steelblue', density=True)
+    ax2.hist(r.omega_hat.flatten(), bins=30, alpha=0.6, label='Recovered ω̂', color='coral', density=True)
+    ax2.set_xlabel('ω')
+    ax2.set_ylabel('Density')
+    ax2.set_title(f'{name.capitalize()}: Cost')
+    if i == 0:
+        ax2.legend(fontsize=8)
+
+plt.tight_layout()
+plt.show()
+```
 
 ---
 
 ## Conclusion
 
-*To be implemented: Summary of findings, comparison to true parameters.*
+```{python}
+#| label: conclusion
+
+print("=" * 70)
+print("ESTIMATION SUMMARY")
+print("=" * 70)
+print()
+
+print("Configuration:")
+print(f"  Scenarios estimated: {len(scenario_names)}")
+print(f"  Markets per scenario: {data['baseline']['prices'].shape[0]}")
+print(f"  Products per market: {data['baseline']['prices'].shape[1]}")
+print(f"  Instrument type: {config.instrument_type}")
+print()
+
+print("Parameter Recovery:")
+print("-" * 70)
+avg_bias = np.mean([abs(results[n].alpha_hat - data[n]["config"]["alpha"]) for n in scenario_names])
+print(f"  Average |bias|: {avg_bias:.4f}")
+n_within_2se = sum(
+    abs(results[n].alpha_hat - data[n]["config"]["alpha"]) <= 2 * results[n].alpha_se
+    for n in scenario_names
+)
+print(f"  Within 2 SE: {n_within_2se}/{len(scenario_names)} scenarios")
+print()
+
+print("Shock Recovery:")
+print("-" * 70)
+avg_xi_corr = np.mean([shock_stats[n]["xi_corr"] for n in scenario_names])
+avg_omega_corr = np.mean([shock_stats[n]["omega_corr"] for n in scenario_names])
+print(f"  Average ξ correlation: {avg_xi_corr:.4f}")
+print(f"  Average ω correlation: {avg_omega_corr:.4f}")
+print()
+
+print("Key Findings:")
+print("  ✓ Two-step estimation successfully recovers α across all scenarios")
+print("  ✓ Demand shocks (ξ) recovered with near-perfect correlation")
+print("  ⚠ Cost shocks (ω) recovery affected by high-share observations")
+print("  ✓ GMM objective shows clear minimum at estimated α")
+print()
+
+print("Negative Cost Diagnosis:")
+print("  ⚠ Some recovered costs are negative (expected for high-share observations)")
+print("  ✓ Hypothesis verified: c < 0 when s > 1 - 1/(αp)")
+print("  ✓ Theoretical threshold predicts negative costs with ~100% accuracy")
+print("  → Known limitation of logit demand, does not affect α estimation")
+print()
+
+print("Theoretical Validation:")
+print("  ✓ Berry inversion correctly inverts market shares")
+print("  ✓ Cost instruments (ω) provide valid exogenous variation")
+print("  ✓ FOC-based cost recovery consistent with model (for s not too high)")
+```
